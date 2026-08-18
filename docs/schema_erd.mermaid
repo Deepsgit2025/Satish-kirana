@@ -1,0 +1,664 @@
+erDiagram
+    STORES ||--o{ DEVICES : "hosts"
+    STORES ||--o{ TRANSACTIONS : "issues"
+
+    STORES {
+        bigint id PK
+        varchar code UK "in bill numbers"
+        text business_name
+        text legal_name
+        varchar gstin
+        varchar fssai_no "prints on every bill"
+        varchar legal_metrology_reg_no "packer registration"
+        text packer_name "on repack labels"
+        text packer_address
+        text consumer_care_details
+        varchar state_code "IGST vs CGST+SGST"
+        text logo_path
+        text signature_path
+        date books_beginning_date
+    }
+
+    LABEL_TEMPLATES {
+        bigint id PK
+        varchar name
+        int width_mm
+        int height_mm
+        int labels_per_row
+        int font_size_mrp "must be conspicuous"
+        jsonb field_layout "Rule 6 declarations"
+    }
+    FINANCIAL_YEARS ||--o{ TRANSACTIONS : "scopes"
+    FINANCIAL_YEARS ||--o{ TRANSACTION_SERIES : "resets"
+
+    ROLES ||--o{ EMPLOYEES : "defines"
+    ROLES ||--o{ ROLE_PERMISSIONS : "grants"
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : "in"
+
+    EMPLOYEES ||--o{ TRANSACTIONS : "cashier"
+    EMPLOYEES ||--o{ RACK_ASSIGNMENTS : "responsible for"
+    EMPLOYEES ||--o{ REPACK_BATCHES : "packs"
+    EMPLOYEES ||--o{ ATTENDANCE_PUNCHES : "punches"
+    EMPLOYEES ||--o{ ATTENDANCE_DAYS : "worked"
+    EMPLOYEES ||--o{ EMPLOYEE_SHIFTS : "rostered"
+    EMPLOYEES ||--o{ CYCLE_COUNTS : "counts"
+    EMPLOYEES ||--o{ STOCK_ADJUSTMENTS : "approves"
+    EMPLOYEES ||--o{ DAY_SESSIONS : "operates"
+
+    DEVICES ||--o{ TRANSACTIONS : "generates"
+    DEVICES ||--o{ TRANSACTION_SERIES : "owns"
+    DEVICES ||--o{ DAY_SESSIONS : "opens"
+    DEVICES ||--o{ STOCK_LEDGER : "writes"
+    DEVICES ||--o{ SYNC_STATE : "tracks"
+    PRINT_PROFILES ||--o{ DEVICES : "configures"
+
+    UNITS ||--o{ PRODUCTS : "base unit"
+    UNITS ||--o{ TRANSACTION_LINES : "measured in"
+    UNITS ||--o{ UNIT_CONVERSIONS : "converts from"
+
+    CATEGORIES ||--o{ CATEGORIES : "parent of"
+    CATEGORIES ||--o{ PRODUCTS : "classifies"
+    HSN_CODES ||--o{ PRODUCTS : "codes"
+    TAX_SLABS ||--o{ PRODUCTS : "current rate"
+    TAX_SLABS ||--o{ TRANSACTION_CHARGES : "taxes"
+
+    PRODUCTS ||--o{ PRODUCT_BARCODES : "scanned as"
+    PRODUCTS ||--o{ PRODUCT_PRICES : "priced over time"
+    PRODUCTS ||--o{ PRODUCT_LOCATIONS : "stocked at"
+    PRODUCTS ||--o{ TRANSACTION_LINES : "transacted as"
+    PRODUCTS ||--o{ STOCK_LEDGER : "moves"
+    PRODUCTS ||--o{ STOCK_ON_HAND : "held as"
+    PRODUCTS ||--o{ DAILY_STOCK_SNAPSHOTS : "frozen as"
+    PRODUCTS ||--o{ STOCK_ADJUSTMENTS : "adjusted"
+    PRODUCTS ||--o{ CYCLE_COUNT_LINES : "counted"
+    PRODUCTS ||--o{ REPACK_BATCHES : "bulk source"
+    PRODUCTS ||--o{ REPACK_OUTPUTS : "packet output"
+    PRODUCTS ||--o{ LABEL_PRINT_JOBS : "labelled"
+    PRODUCTS ||--o{ PRODUCT_BATCHES : "lots of"
+    PRODUCT_BATCHES ||--o{ TRANSACTION_LINES : "picked FEFO"
+    PRODUCT_BATCHES ||--o{ STOCK_LEDGER : "moves"
+    PRODUCT_BATCHES ||--o{ STOCK_ADJUSTMENTS : "written off"
+    REPACK_OUTPUTS ||--o| PRODUCT_BATCHES : "creates"
+    TRANSACTIONS ||--o{ PRODUCT_BATCHES : "received via GRN"
+
+    LOCATIONS ||--o{ LOCATIONS : "parent of"
+    LOCATIONS ||--o{ PRODUCT_LOCATIONS : "holds"
+    LOCATIONS ||--o{ RACK_ASSIGNMENTS : "assigned"
+    LOCATIONS ||--o{ STOCK_LEDGER : "at"
+    LOCATIONS ||--o{ STOCK_ON_HAND : "at"
+    LOCATIONS ||--o{ CYCLE_COUNTS : "counted at"
+    LOCATIONS ||--o{ TRANSACTION_LINES : "picked from"
+
+    PARTY_GROUPS ||--o{ PARTIES : "groups"
+    PARTIES ||--o{ TRANSACTIONS : "trades"
+    PARTIES ||--o{ PARTY_LEDGER : "owes"
+    PARTIES ||--o{ LOYALTY_TRANSACTIONS : "accrues"
+
+    TRANSACTIONS ||--o{ TRANSACTION_LINES : "has"
+    TRANSACTIONS ||--o{ TRANSACTION_TAX_SUMMARY : "grouped into"
+    TRANSACTIONS ||--o{ TRANSACTION_CHARGES : "adds"
+    TRANSACTIONS ||--o{ TRANSACTION_PAYMENTS : "settled by"
+    TRANSACTIONS ||--o{ PARTY_LEDGER : "posts"
+    TRANSACTIONS ||--o{ LOYALTY_TRANSACTIONS : "earns"
+    TRANSACTIONS ||--o{ TRANSACTIONS : "reference of"
+    TRANSACTIONS ||--o{ PAYMENT_ALLOCATIONS : "pays"
+    TRANSACTIONS ||--o{ PAYMENT_ALLOCATIONS : "settled by"
+    TRANSACTION_LINES ||--o{ STOCK_LEDGER : "posts"
+    EXPENSE_CATEGORIES ||--o{ TRANSACTIONS : "categorises"
+
+    ACCOUNTS ||--o{ TRANSACTION_PAYMENTS : "receives"
+    ACCOUNTS ||--o{ ACCOUNT_LEDGER : "balances"
+    TRANSACTIONS ||--o{ ACCOUNT_LEDGER : "posts"
+
+    REPACK_BATCHES ||--o{ REPACK_OUTPUTS : "yields"
+    REPACK_OUTPUTS ||--o{ STOCK_LEDGER : "posts"
+    STOCK_ADJUSTMENTS ||--o{ STOCK_LEDGER : "posts"
+    CYCLE_COUNTS ||--o{ CYCLE_COUNT_LINES : "has"
+    STOCK_LEDGER ||--|| STOCK_ON_HAND : "derives"
+
+    DAY_SESSIONS ||--o{ TRANSACTIONS : "shift context"
+    DAY_SESSIONS ||--o{ SESSION_DENOMINATIONS : "counted in"
+    DAY_SESSIONS ||--o{ CASH_MOVEMENTS : "records"
+
+    ATTENDANCE_DEVICES ||--o{ ATTENDANCE_PUNCHES : "logs"
+    ATTENDANCE_PUNCHES ||--o{ ATTENDANCE_DAYS : "rolls up to"
+    SHIFTS ||--o{ EMPLOYEE_SHIFTS : "rosters"
+    SHIFTS ||--o{ ATTENDANCE_DAYS : "measured against"
+    ATTENDANCE_DAYS ||--o{ TRANSACTIONS : "clocked in for"
+    EMPLOYEES ||--o{ EMPLOYEE_PAY_RATES : "paid at"
+    EMPLOYEES ||--o{ EMPLOYEE_ADVANCES : "owes"
+    EMPLOYEES ||--o{ SALARY_RUNS : "earns"
+    ATTENDANCE_DAYS ||--o{ SALARY_RUNS : "counted into"
+    SALARY_RUNS ||--o{ SALARY_PAYMENTS : "settled by"
+    SALARY_RUNS ||--o| SALARY_SLIPS : "issues"
+    SALARY_RUNS ||--o{ EMPLOYEE_ADVANCES : "recovers"
+    ACCOUNTS ||--o{ SALARY_PAYMENTS : "pays from"
+    ACCOUNTS ||--o{ EMPLOYEE_ADVANCES : "advances from"
+
+    EMPLOYEE_PAY_RATES {
+        bigint id PK
+        bigint employee_id FK
+        enum pay_type "daily monthly"
+        numeric pay_rate
+        numeric overtime_rate_per_hour
+        numeric half_day_pay_pct
+        date effective_from
+        date effective_to "null = current"
+    }
+
+    EMPLOYEE_ADVANCES {
+        bigint id PK
+        bigint employee_id FK
+        enum entry_type "opening advance_given recovered"
+        numeric amount "signed"
+        numeric balance_after
+        bigint salary_run_id FK
+        bigint account_id FK "cash leaves the drawer"
+        date entry_date
+    }
+
+    SALARY_RUNS {
+        bigint id PK
+        bigint employee_id FK
+        date period_month UK
+        numeric pay_rate "snapshot"
+        int full_days "snapshot"
+        int half_days "snapshot"
+        int absent_days "snapshot"
+        numeric overtime_hours
+        numeric gross_amount
+        numeric advance_opening "snapshot"
+        numeric advance_recovered
+        numeric advance_closing "snapshot"
+        numeric cash_paid
+        enum status "draft paid cancelled"
+        date paid_on
+    }
+
+    SALARY_PAYMENTS {
+        bigint id PK
+        bigint salary_run_id FK
+        enum payment_mode "cash upi bank_transfer"
+        bigint account_id FK
+        numeric amount
+        date paid_on
+    }
+
+    SALARY_SLIPS {
+        bigint id PK
+        bigint salary_run_id FK
+        varchar slip_number
+        text pdf_path
+        enum sent_via "whatsapp print pdf"
+        varchar sent_to_phone
+        timestamptz sent_at
+    }
+
+    LABEL_TEMPLATES ||--o{ LABEL_PRINT_JOBS : "formats"
+    LOYALTY_CONFIG ||--o{ LOYALTY_TRANSACTIONS : "rules"
+    LOCATIONS ||--o{ STOCK_TRANSFERS : "sends from"
+    LOCATIONS ||--o{ STOCK_TRANSFERS : "receives at"
+    STOCK_TRANSFERS ||--o{ STOCK_TRANSFER_LINES : "has"
+    STOCK_TRANSFER_LINES ||--o{ STOCK_LEDGER : "posts"
+    MESSAGE_TEMPLATES ||--o{ MESSAGE_LOG : "renders"
+    TRANSACTIONS ||--o{ MESSAGE_LOG : "notifies"
+    SALARY_SLIPS ||--o{ MESSAGE_LOG : "sent via"
+
+    STOCK_TRANSFERS {
+        bigint id PK
+        varchar transfer_no UK
+        bigint from_location_id FK
+        bigint to_location_id FK
+        date transfer_date
+        bigint transferred_by FK
+        bigint received_by FK
+        enum status "draft in_transit received"
+    }
+
+    STOCK_TRANSFER_LINES {
+        bigint id PK
+        bigint transfer_id FK
+        bigint product_id FK
+        bigint batch_id FK
+        numeric qty_sent
+        numeric qty_received
+        numeric variance_qty "where stock vanishes"
+    }
+
+    MESSAGE_TEMPLATES {
+        bigint id PK
+        enum txn_type
+        enum channel "whatsapp sms"
+        text body_template "with placeholders"
+        boolean attach_pdf
+        boolean auto_send
+    }
+
+    MESSAGE_LOG {
+        bigint id PK
+        varchar ref_table
+        bigint ref_id
+        bigint party_id FK
+        enum channel
+        varchar to_phone
+        enum status "queued sent failed"
+        timestamptz sent_at
+    }
+
+    TRANSACTIONS {
+        bigint id PK
+        uuid uuid UK "made on counter, sync key"
+        enum txn_type "sale purchase credit_note payment_in expense"
+        varchar txn_number "452104015-001397"
+        bigint financial_year_id FK
+        bigint device_id FK
+        bigint party_id FK "null for walk-in"
+        bigint ref_txn_id FK "credit note to sale"
+        bigint cashier_id FK
+        varchar cashier_name "snapshot, prints"
+        bigint day_session_id FK
+        bigint attendance_day_id FK "backfilled"
+        bigint expense_category_id FK
+        timestamptz txn_datetime "business time"
+        varchar place_of_supply "IGST vs CGST+SGST"
+        varchar buyer_gstin "null = B2C, normal case"
+        numeric bill_discount_amount
+        numeric additional_charges
+        numeric taxable_amount
+        numeric round_off
+        numeric net_amount
+        numeric paid_amount
+        numeric balance_amount
+        enum payment_status "paid partial unpaid"
+        numeric mrp_savings
+        int points_earned
+        text remarks
+        timestamptz synced_at "null = offline only"
+        enum status "draft parked completed void"
+    }
+
+    TRANSACTION_LINES {
+        bigint id PK
+        bigint txn_id FK
+        bigint product_id FK
+        varchar description "snapshot"
+        varchar hsn_code "snapshot"
+        numeric qty
+        numeric free_qty "10+1 schemes"
+        bigint unit_id FK
+        numeric conversion_factor
+        numeric rate
+        enum rate_tax_type "inclusive exclusive"
+        numeric discount_amount
+        numeric taxable_amount "rounded per line"
+        numeric cgst_rate "frozen"
+        numeric cgst_amount
+        int tax_group_index "printed 1) 2)"
+        numeric cost_rate "for bill-wise profit"
+        bigint location_id FK
+    }
+
+    TRANSACTION_TAX_SUMMARY {
+        bigint id PK
+        bigint txn_id FK
+        int tax_group_index
+        numeric cgst_rate
+        numeric sgst_rate
+        numeric taxable_amount
+        numeric cgst_amount
+        numeric total_amount
+    }
+
+    TRANSACTION_PAYMENTS {
+        bigint id PK
+        bigint txn_id FK
+        enum payment_mode "cash upi card points credit"
+        bigint account_id FK
+        numeric amount
+        numeric tendered_amount
+        numeric change_amount
+        varchar reference_no "RRN for upi"
+    }
+
+    TRANSACTION_CHARGES {
+        bigint id PK
+        bigint txn_id FK
+        varchar charge_name "packing delivery"
+        numeric amount
+        bigint tax_slab_id FK
+    }
+
+    PAYMENT_ALLOCATIONS {
+        bigint id PK
+        bigint payment_txn_id FK
+        bigint against_txn_id FK
+        numeric amount_allocated
+    }
+
+    PARTIES {
+        bigint id PK
+        enum party_type "customer supplier both"
+        varchar name
+        varchar phone "indexed, loyalty key"
+        varchar gstin
+        enum gst_type "unregistered registered composition"
+        varchar state_code
+        numeric opening_balance
+        numeric current_balance "cache"
+        numeric credit_limit
+        int points_balance "cache"
+        timestamptz last_visit_at
+    }
+
+    PARTY_LEDGER {
+        bigint id PK
+        bigint party_id FK
+        bigint txn_id FK
+        enum entry_type "sale payment_in credit_note"
+        numeric debit
+        numeric credit
+        numeric balance_after
+        date entry_date
+    }
+
+    PRODUCTS {
+        bigint id PK
+        varchar item_code UK
+        varchar short_name "prints on 80mm"
+        bigint category_id FK
+        varchar hsn_code FK
+        bigint tax_slab_id FK
+        bigint base_unit_id FK
+        bigint secondary_unit_id FK
+        enum product_kind "standard bulk repacked"
+        boolean is_sellable "false for bulk"
+        numeric mrp
+        numeric sale_price
+        enum sale_price_tax_type "inclusive exclusive"
+        numeric purchase_price
+        numeric reorder_level
+        boolean track_batches "false by default"
+        boolean tax_on_mrp
+        varchar generic_name "Legal Metrology Rule 6"
+        enum food_type "veg non_veg"
+        text allergens
+        text storage_instructions
+        numeric tolerance_pct
+        jsonb custom_fields
+    }
+
+    PRODUCT_BARCODES {
+        bigint id PK
+        bigint product_id FK
+        varchar barcode UK "hottest index"
+        enum barcode_type "ean13 code128_internal"
+        boolean is_primary
+    }
+
+    PRODUCT_BATCHES {
+        bigint id PK
+        bigint product_id FK
+        varchar batch_no UK
+        date mfg_date
+        date expiry_date
+        bigint repack_batch_id FK
+        bigint grn_txn_id FK
+        numeric cost_rate "this lot's cost"
+        numeric mrp "varies per lot"
+        numeric qty_received
+        numeric qty_remaining "cache"
+        enum status "active expired exhausted"
+    }
+
+    PRODUCT_PRICES {
+        bigint id PK
+        bigint product_id FK
+        numeric sale_price
+        numeric mrp
+        enum tax_type
+        timestamptz effective_from
+        timestamptz effective_to "null = current"
+    }
+
+    UNITS {
+        bigint id PK
+        varchar name "KILOGRAMS"
+        varchar short_name "Kg, prints"
+        boolean is_system
+    }
+
+    UNIT_CONVERSIONS {
+        bigint id PK
+        bigint base_unit_id FK
+        bigint secondary_unit_id FK
+        numeric factor "1 BAG = 50 KG"
+    }
+
+    TAX_SLABS {
+        bigint id PK
+        varchar name "GST 5%"
+        numeric cgst_rate
+        numeric sgst_rate
+        numeric igst_rate
+        date effective_from
+        date effective_to
+    }
+
+    STOCK_LEDGER {
+        bigint id PK
+        bigint product_id FK
+        bigint location_id FK
+        enum txn_type "sale purchase repack adjustment"
+        numeric qty_delta "signed"
+        varchar ref_table
+        bigint ref_id
+        numeric cost_rate
+        bigint device_id FK
+        timestamptz occurred_at "business time"
+        timestamptz recorded_at "server time"
+    }
+
+    STOCK_ON_HAND {
+        bigint product_id PK
+        bigint location_id PK
+        numeric qty
+        bigint last_ledger_id
+    }
+
+    DAILY_STOCK_SNAPSHOTS {
+        bigint id PK
+        date snapshot_date UK
+        bigint product_id FK
+        bigint location_id FK
+        numeric qty
+        numeric valuation_amount
+    }
+
+    REPACK_BATCHES {
+        bigint id PK
+        varchar batch_code UK
+        bigint source_product_id FK "must be bulk"
+        numeric source_qty
+        date packed_on
+        date expiry_date
+        numeric yield_pct
+    }
+
+    REPACK_OUTPUTS {
+        bigint id PK
+        bigint batch_id FK
+        bigint output_product_id FK
+        numeric qty_produced
+        numeric unit_weight
+        bigint location_id FK
+    }
+
+    LOCATIONS {
+        bigint id PK
+        varchar code UK "A-01-3"
+        enum location_type "rack godown cold"
+        bigint parent_id FK
+    }
+
+    RACK_ASSIGNMENTS {
+        bigint id PK
+        bigint location_id FK
+        bigint employee_id FK
+        date valid_from
+        date valid_to "null = current"
+    }
+
+    CYCLE_COUNT_LINES {
+        bigint id PK
+        bigint count_id FK
+        bigint product_id FK
+        numeric system_qty "frozen at start"
+        numeric counted_qty
+        numeric variance_qty
+        boolean within_tolerance
+    }
+
+    STOCK_ADJUSTMENTS {
+        bigint id PK
+        enum adjustment_type "damage expiry theft"
+        bigint product_id FK
+        numeric qty_delta
+        text reason
+        bigint approved_by FK
+        enum status "pending approved"
+    }
+
+    ACCOUNTS {
+        bigint id PK
+        enum account_type "cash bank"
+        varchar display_name
+        varchar upi_id
+        numeric opening_balance
+        numeric current_balance "cache"
+        boolean print_upi_qr
+    }
+
+    ACCOUNT_LEDGER {
+        bigint id PK
+        bigint account_id FK
+        bigint txn_id FK
+        numeric debit
+        numeric credit
+        numeric balance_after
+        date entry_date
+    }
+
+    DAY_SESSIONS {
+        bigint id PK
+        bigint device_id FK
+        date business_date UK
+        numeric opening_float
+        numeric expected_cash
+        numeric counted_cash
+        numeric cash_variance
+        enum status "open closed"
+    }
+
+    SESSION_DENOMINATIONS {
+        bigint id PK
+        bigint session_id FK
+        enum phase "open close"
+        int denomination
+        int count
+    }
+
+    LOYALTY_TRANSACTIONS {
+        bigint id PK
+        bigint party_id FK
+        bigint txn_id FK
+        enum txn_type "earn redeem expire"
+        int points "signed"
+        int balance_after
+        date expires_on
+    }
+
+    ATTENDANCE_PUNCHES {
+        bigint id PK
+        bigint attendance_device_id FK
+        varchar biometric_user_id "device's own id"
+        bigint employee_id FK "nullable, resolved later"
+        timestamptz punch_time
+        bigint device_log_id UK
+    }
+
+    ATTENDANCE_DAYS {
+        bigint id PK
+        bigint employee_id FK
+        date work_date UK
+        timestamptz first_in
+        timestamptz last_out
+        int total_minutes
+        int late_minutes
+        enum status "present absent half_day"
+        boolean is_manual_override
+    }
+
+    PRINT_PROFILES {
+        bigint id PK
+        enum printer_type "thermal_80 thermal_58 a4"
+        inet printer_ip
+        int chars_per_line "48 for 80mm"
+        varchar theme
+        enum print_mode "text graphic"
+        boolean auto_cut
+        boolean open_drawer_after_print
+        int copies
+        int extra_feed_lines
+        enum amount_in_words_format "indian international"
+        text signature_image_path
+        jsonb field_toggles "~40 show/hide flags"
+    }
+
+    TRANSACTION_SERIES {
+        bigint id PK
+        enum txn_type
+        bigint device_id FK
+        bigint financial_year_id FK
+        varchar prefix
+        bigint last_number
+    }
+
+    DEVICES {
+        bigint id PK
+        varchar device_code UK "C1 C2 OFFICE"
+        enum device_type
+        varchar bill_prefix
+        bigint print_profile_id FK
+        timestamptz last_seen_at
+    }
+
+    EMPLOYEES {
+        bigint id PK
+        varchar emp_code UK
+        varchar name
+        bigint role_id FK
+        varchar biometric_user_id "maps to device"
+        enum pay_type "daily monthly"
+        numeric pay_rate
+        numeric advance_balance "cache"
+        enum status
+    }
+
+    SYNC_OUTBOX {
+        bigint id PK
+        varchar entity_type
+        uuid entity_uuid "dedupe key"
+        jsonb payload
+        int attempts
+        enum status "pending sent failed"
+    }
+
+    AUDIT_LOG {
+        bigint id PK
+        varchar table_name
+        bigint record_id
+        enum action
+        jsonb old_values
+        jsonb new_values
+        bigint employee_id FK
+    }

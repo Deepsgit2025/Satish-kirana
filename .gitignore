@@ -1,0 +1,52 @@
+# --- SECRETS — never commit these ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+aws-credentials*
+backup-passphrase*
+secrets/
+
+# --- local data ---
+*.sqlite
+*.sqlite3
+*.db
+/data/
+/backups/
+/uploads/
+dumps/
+*.dump
+*.sql.gz
+
+# --- dependencies & build ---
+node_modules/
+dist/
+build/
+out/
+release/
+.vite/
+*.tsbuildinfo
+
+# --- logs & runtime ---
+logs/
+*.log
+npm-debug.log*
+pids/
+*.pid
+
+# --- test & coverage ---
+coverage/
+.nyc_output/
+
+# --- editor / OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- generated artifacts ---
+/print-samples/
+/label-samples/
+*.local
