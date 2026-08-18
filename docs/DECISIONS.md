@@ -1,0 +1,126 @@
+# Decision Log
+
+Why things are the way they are. `schema.md` says *what*, this says *why* — so a decision isn't relitigated six months from now.
+
+Append new entries at the bottom. Never rewrite history; if a decision is reversed, add a new entry that supersedes it.
+
+---
+
+## D1 — Unified `transactions` table, not one per document type
+Sale, purchase, credit note, debit note, payment in/out, expense all share the same shape: party, lines, discount, tax, round-off, payment. One table means one numbering engine, one party ledger, one tax engine, one sync path. Day Book and Party Statement become single queries instead of eight-way UNIONs.
+
+Cost: nullable POS columns on purchase rows. At ~1,000 sales and ~20 purchases a day that's free in Postgres. Revisit only if a second store needs different document types.
+
+## D2 — `parties` merges customers and suppliers
+Party statement, balances, payments and credit notes all key off one ledger. Two tables means two payment flows and two balance calculations that eventually disagree.
+
+Walk-in cash customers do **not** create party rows — 1,000 bills/day would create 300,000 junk rows a year. `transactions.party_id` stays nullable; a party is created only when a phone number is entered for loyalty or credit.
+
+## D3 — `units` master with conversions, not a UOM enum
+`1 BAG = 50 KG` is what makes the repack flow work, and lets a GRN record "2 bags" while the ledger moves 100 kg.
+
+## D4 — Tax computed on the group, not per line
+Verified against a real D-Mart receipt: 106.67 + 41.91 = 148.58, × 2.5% = 3.71. Per-line-then-sum gives 3.72 and the bill stops tying out. One rounding function, one call site.
+
+## D5 — Every line snapshots its own tax, price, name and HSN
+A receipt is a tax document. Rates change (22 Sep 2025 revision), employees leave, products get renamed. A reprint must show what was true on the day. No joins to `tax_slabs` or `products` when rendering.
+
+## D6 — Ledgers are append-only
+`stock_ledger`, `party_ledger`, `account_ledger`, `employee_advances`, `loyalty_transactions`. Stock is derived; `stock_on_hand` is a rebuildable cache. This is what makes shrinkage investigation possible — a mutable quantity column makes it permanently impossible.
+
+## D7 — Light ledger, no double-entry
+**Client decision.** No Balance Sheet or Trial Balance. Delivers Day Book, Cash Flow, Party Statement, item- and bill-wise profit, and an **operating P&L** (Sales − COGS − Expenses), which needs no chart of accounts. Formal books stay with his CA, fed by Tally export. Removes ~25–30% of build cost.
+
+## D8 — Supplier payment is both COD and credit
+**Client confirmed.** `parties.payment_terms_days` NULL means COD. Payment allocation, due dates, ageing and reminders are all P1, not optional.
+
+## D9 — Batch tracking selective, FEFO automatic
+`products.track_batches` defaults false; enabled for perishables and repacked goods. When a tracked product is scanned the system silently picks the nearest-expiry batch. **Never prompt the cashier for a batch** — a dialog on every scan would stop the queue at 1,000 bills/day.
+
+## D10 — Repack instead of a weighing scale
+**Client decision.** Loose goods are packed in advance into fixed weights and labelled, so every item scans like any other at the counter. Removes scale integration, PLU sync and embedded-barcode parsing. Adds the repack module, labels and internal SKUs. Net saving.
+
+## D11 — UPI terminal standalone first
+**Client decision.** Cashier runs the card machine, keys amount and RRN last-4 into the bill. Integrated ECR needs bank paperwork outside your control — built behind a payment-provider interface so it can be swapped later without touching billing.
+
+## D12 — Unconstrained greedy change suggestion
+**Client decision.** No per-transaction drawer denomination tracking — that would need data entry on every cash bill and cashiers would skip it under rush. Denominations captured at day-open float and day-close count only.
+
+## D13 — B2C only, no e-invoicing
+**Client confirmed.** `transactions.buyer_gstin` exists but stays NULL. If populated the sale is B2B and above ₹5 crore turnover legally needs an IRN — so the system **flags it for the office rather than issuing silently**. IRP integration is phase 2 with its own price.
+
+## D14 — 6-digit HSN throughout
+Required above ₹5 crore turnover for GSTR-1 Table 12, and B2C HSN reporting is mandatory at that level. Set as the data-entry standard before catalogue import; lengthening thousands of codes later is miserable.
+
+## D15 — Never delete a tax slab
+Set `effective_to`. Deleting orphans every historical bill. Slab resolution is by document datetime. `slab_group` lets a current slab walk back to its superseded predecessor (`GST 18%` → pre-revision `GST 12%`).
+
+Bulk slab reassignment takes an `effective_from` date and applies via a nightly job — not immediately. Offers keep-MRP (absorb) or recompute-MRP (pass on), because retail prices are GST-inclusive.
+
+## D16 — Labels are regulated output
+Repacking makes the shop a *packer*. Legal Metrology Rule 6 and FSSAI labelling both apply: packer name and address, generic name, net quantity, packing month/year, MRP, computed unit sale price, FSSAI number, batch, expiry, veg/non-veg mark, allergens, storage, consumer care.
+
+Unit sale price: per gram under 1 kg, per kilogram at or above. Computed, never typed.
+
+**The label engine refuses to print when a mandatory declaration is missing** — a partial label is the violation. Reprints may only *lower* MRP; stickers cannot raise it or cover the original declaration.
+
+50×25 mm will not fit a compliant food label. Use 100×50 mm for repacked goods.
+
+## D17 — Manual attendance in P1, biometric in phase 2
+**Client decision.** Removes the largest schedule unknown from the critical path. `attendance_punches` and `attendance_days` stay separate tables so phase 2 adds a device integration and a nightly job, not a payroll rewrite.
+
+Overtime is always entered manually, never derived from punch-out — staff linger after closing and the owner would pay for loitering. Defaults to 2× the ordinary rate per the MP Shops and Establishments Act.
+
+## D18 — Salary posts to a locked expense category
+Salary appears both as payroll output and as an expense category. If both write, every salary is counted twice and expenses inflate with no visible cause. Payroll posts automatically to a reserved category nobody can key into. Same for advances, which are already recorded in `employee_advances`.
+
+## D19 — Advances post to `account_ledger` too
+Cash handed to an employee left the drawer. If it only lands in `employee_advances`, day-close never reconciles.
+
+## D20 — Bilingual, with raster printing only when needed
+**Client decision: Hindi receipts are a must, item names specifically.**
+
+ESC/POS has no Devanagari code page, so Hindi requires rendering the receipt to a bitmap. Raster costs ~3–4 extra seconds per bill versus text mode — an hour of queue time a day at this volume.
+
+Mitigation: **render raster only when a line carries a Hindi name.** English-only bills stay fast.
+
+Hindi columns are nullable with English fallback (`COALESCE(name_hi, name)`) so he fills the few hundred items that matter rather than doubling catalogue data entry.
+
+Labels stay English — Legal Metrology permits either script.
+
+## D21 — Cloud is a write-only vault
+**Client approved AWS Mumbai (ap-south-1).** The application never reads from cloud at runtime. No latency, no dependency, billing continues through an internet outage.
+
+**Two separate jobs.** Database: nightly full dump, tiered retention 7 daily / 12 monthly / 7 yearly. Files: sync-once, versioned, never re-uploaded. Files are ~95% of volume; splitting them is what keeps ten-year cost at roughly ₹7,600.
+
+Account in the client's name, his card, his GSTIN — so he deducts it and claims the input credit, and so you're not holding his data hostage. Write-only IAM user, object lock on, client-side encryption with the passphrase stored off-server.
+
+Photos never go in Postgres — path in the database, file on disk, resized to ~1 MB on capture.
+
+## D22 — Monthly automated restore verification
+A backup nobody has restored is not a backup. Monthly job downloads from cloud, decrypts, restores to scratch, and asserts bill counts, sales totals and `stock_on_hand` against `stock_ledger`. Failures surface as a red banner on the dashboard. Annual manual drill on a different machine with the person who'd actually do it.
+
+## D23 — Put-away splits a received line across locations
+100 units arrive, 40 to a rack, 60 to the godown. `grn_line_putaway` allocations must sum exactly to the line quantity, keeping the GRN line matched to the supplier invoice. Pre-filled from the product's primary rack so the common case is one keystroke.
+
+## D24 — Count sheets freeze `system_qty` at generation
+Not at data-entry time. Otherwise sales made while someone is counting appear as shortages and an employee is blamed for stock that was legitimately sold.
+
+## D25 — Roles seeded, not left to a wizard
+Cashier (`bill.create` only), Supervisor (+ `bill.void`, `stock.adjust`), Owner (all). Editable configuration, `is_system = false`. Without seeds nobody can log in until someone hand-builds a permission matrix under time pressure — and they'd grant everything to everyone.
+
+`report.view_profit` to be added in 002: profit visibility must be a role permission, not only the global `show_profit_while_billing` toggle.
+
+---
+
+## Open items
+
+| Item | Owner | Blocks |
+|---|---|---|
+| Product CSV — several thousand SKUs, 6-digit HSN, optional `name_hi` | Client | R0 completion |
+| Shop opening date | Client | Whether a stopgap billing package is needed |
+| Legal Metrology packer registration number | Client | R7 |
+| Monthly-salary policy — does an absent day reduce pay? | Client | R8 |
+| Hardware purchase to spec | Client | R1 |
+
+FSSAI licence: **held**, number to be entered in the Business Profile.
