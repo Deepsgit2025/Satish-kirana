@@ -362,7 +362,7 @@ Unique on `(txn_type, device_id, financial_year_id)`. Counter C1 owns its sale s
 | bill_discount_amount | NUMERIC(12,2) | header-level discount |
 | bill_discount_pct | NUMERIC(5,2) NULL | |
 | additional_charges | NUMERIC(12,2) | packing / delivery |
-| taxable_amount | NUMERIC(12,2) | 148.58 |
+| taxable_amount | NUMERIC(12,2) | 148.57 |
 | cgst_amount / sgst_amount / igst_amount / cess_amount | NUMERIC(12,2) | |
 | round_off | NUMERIC(5,2) | **required** — 155.99 → 156.00 |
 | net_amount | NUMERIC(12,2) | 156.00 |
