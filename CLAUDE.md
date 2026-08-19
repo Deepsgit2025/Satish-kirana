@@ -110,6 +110,12 @@ Violating any of these is a bug, even if the code works and tests pass.
   the future as far as any trigger reading `now()` is concerned, so the row it should have
   matched does not match. Day-close, salary runs and backup verification all straddle this, and
   all three are places where being an hour out is a real figure on a real document.
+- **A test must never assume a shared table is empty.** Anything a real job or CLI writes to —
+  the reconciliation run log, the audit log, the sync outbox — has rows in it the moment someone
+  uses the feature, and a test that asserted "nothing has run yet" then fails for a reason that
+  has nothing to do with the code. Register a throwaway key inside the test's own transaction and
+  assert on that. A test that passes only until someone uses the thing it tests is worse than no
+  test: it looks like coverage and it breaks on the day the feature starts working.
 - **No new dependency without asking.** This runs unattended in a shop for years.
 - **When a spec is ambiguous, stop and ask.** Don't invent business rules — most of them have a reason documented in `docs/schema.md`.
 

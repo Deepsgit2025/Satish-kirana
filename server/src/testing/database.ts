@@ -88,6 +88,34 @@ async function connect(): Promise<pg.Client> {
   return client;
 }
 
+let savepointCounter = 0;
+
+/**
+ * Runs `work` inside a savepoint, rolling back to it if `work` throws and then
+ * rethrowing.
+ *
+ * Postgres aborts the whole transaction on any error, so a test that asserts one
+ * statement is refused cannot then assert anything else - every later query comes
+ * back "current transaction is aborted". Wrapping the refused statement in a
+ * savepoint contains the damage, which is what lets one test check that UPDATE,
+ * DELETE and TRUNCATE are all refused instead of three tests checking one each.
+ */
+export async function inSavepoint<T>(db: Queryable, work: () => Promise<T>): Promise<T> {
+  savepointCounter += 1;
+  const name = `sp_${String(savepointCounter)}`;
+
+  await db.query(`SAVEPOINT ${name}`);
+  try {
+    const result = await work();
+    await db.query(`RELEASE SAVEPOINT ${name}`);
+    return result;
+  } catch (error) {
+    await db.query(`ROLLBACK TO SAVEPOINT ${name}`);
+    await db.query(`RELEASE SAVEPOINT ${name}`);
+    throw error;
+  }
+}
+
 /**
  * Runs `work` against a live session inside a transaction, and rolls it back
  * however `work` ends. Fixtures, sequence values and any slab a test invents

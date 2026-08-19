@@ -56,11 +56,13 @@ The highest-value thing to get right early, and independently verifiable.
 
 ## Step 4 — Stock ledger
 
-> Implement the stock ledger per `docs/schema.md` section G. Append-only, no UPDATE or DELETE. `stock_on_hand` maintained by trigger.
+> Write `005_stock_ledger.sql` from `docs/schema.md` section G: `stock_ledger` and `stock_on_hand` only — the rest of section G belongs to receiving, repacking and counting. Append-only enforced by the database, not by convention. `stock_on_hand` maintained by trigger.
+>
+> Then `006_reconciliation_health.sql`: the health surface from `docs/DECISIONS.md` D30. The `stock_on_hand` drift check is its second entry, which is why it gets built here rather than deferred again.
 >
 > Include a test that posts 100 randomised movements across 5 products and 3 locations, then rebuilds `stock_on_hand` from scratch from the ledger and asserts it matches the trigger-maintained values exactly.
 >
-> Use the step 3 harness — `server/src/testing/database.ts`: a real Postgres, every test inside a transaction that rolls back. Not optional here. The thing under test *is* the trigger, so a fake that answers the question has reimplemented the trigger, and the test then proves the reimplementation right rather than the schema.
+> Use the existing harness — `server/src/testing/database.ts`: a real Postgres, every test inside a transaction that rolls back. Not optional here. The thing under test *is* the trigger, so a fake that answers the question has reimplemented the trigger, and the test then proves the reimplementation right rather than the schema.
 
 **Done when:** the rebuild test passes. This test is the safety net for the entire project — never let it be deleted or skipped.
 
@@ -112,11 +114,13 @@ Auto-update is the sharpest case. The very first build installed in the shop has
 
 ---
 
-## Step 9 — Locations and receiving *(start of R1)*
+## Step 9 — Racks and receiving *(start of R1)*
 
-> Write `005_stock.sql`: locations, rack_assignments, grns, grn_lines, grn_line_putaway, stock_adjustments, stock_transfers. `product_locations` was created in `003_catalog.sql` with `location_id` left unconstrained because `locations` did not exist yet — add the foreign key here.
+> Write `008_receiving.sql`: rack_assignments, grns, grn_lines, grn_line_putaway, stock_adjustments, stock_transfers.
 >
-> Stock is `005`, not `004`: enforcing the `products.tax_slab_id` cache took `004_product_tax_cache.sql`. Three comments inside `003_catalog.sql` still say the locations FK arrives in `004_stock.sql`. They are wrong and they stay wrong — 003 is applied, so it is frozen (CLAUDE.md). `004` corrects the column comment in the database itself.
+> `locations` is already here — `007_locations.sql` brought it forward with the three foreign keys that were waiting on it, so no location id anywhere is unconstrained. `rack_assignments` was left behind because it needs employees and date ranges and has its own screen.
+>
+> The migration number for this work has moved three times, and the frozen files still name the old ones. See `docs/DECISIONS.md` D31 on why a planned filename is not a reference to rely on.
 >
 > `grn_line_putaway` splits one received line across multiple locations — 100 units received, 40 to a rack, 60 to the godown. Allocations must sum exactly to the line quantity; enforce it. Pre-fill from the product's primary rack so the common case is one keystroke.
 

@@ -183,6 +183,48 @@ Three jobs each reporting somewhere different is three jobs nobody reads, and th
 
 ---
 
+## D31 — Build-order step numbers are a reading sequence, not an identifier
+
+Steps get inserted, split and moved — remote support moved from the end of R1 to step 8 the moment its position stopped matching its claim to be R0 work, and everything after it shifted by one. That is the file working as intended. It is a plan, and plans are reordered.
+
+What it means is that a step number is only true on the day it is written. A migration that quotes one is frozen and cannot follow, so it leaves a pointer that is quietly wrong: `003_catalog.sql` still says the locations foreign key arrives in "build-order step 8", which is now step 9.
+
+**Stable references are migration filenames, decision IDs, and the names of things in the database.** `005_stock_ledger.sql`, D27, `product_tax_assignments` — none of them move. Decision IDs are stable precisely because this file is append-only: an entry is superseded by a later one, never renumbered or rewritten. CLAUDE.md's invariant numbers are cited the same way throughout the SQL and deserve the same discipline, so invariants are appended too, never inserted.
+
+**Nothing in code or in a SQL comment references a step number.** Cite the migration, the decision or the table. If a comment genuinely needs to point at planned work, name the file that work will land in.
+
+---
+
+## D32 — Stock drift is reported, never corrected on a schedule
+
+Two reconciliation checks now run nightly and they behave differently on purpose.
+
+`product_tax_cache` **corrects**. Drift there is the ordinary overnight case: a rate change dated for the first of the month comes due, nothing writes at that instant, and no trigger can fire. Advancing the cache is the job. What remains afterwards is the part it could not fix — a product with no tax assignment at all — and that is what the panel reports.
+
+`stock_on_hand` **only reports**. Drift there is never expected. Every movement writes the ledger and the trigger updates the cache in the same statement, so the two can only diverge if something is broken: the trigger, a hand-edit, a restore that went wrong. `rebuild_stock_on_hand()` would put the figure right in a second — and that is exactly why it must not run on a schedule.
+
+**A nightly rebuild would repair the symptom and destroy the evidence.** The morning after, the figures agree, the panel is green, and the fault that caused the divergence is gone with no trace of what it was or how many days it had been happening. Stock drift is already the one failure in this system that cannot be reconstructed after the fact — the movements that caused it are months of ordinary trading ago. Silently healing it every night converts a visible bug into a permanent unexplained shortage, which is the exact thing the append-only ledger exists to prevent (D6).
+
+So the rebuild is a decision a person makes, after looking. The check's job is to make sure a person looks.
+
+The same reasoning applies to any future check: **correct on a schedule only where drift is an expected consequence of time passing.** Anywhere drift means something is wrong, correcting it automatically is destroying the report.
+
+---
+
+## D33 — A mutation must be larger than the column's storage precision
+
+Mutation testing here means breaking the code on purpose and confirming a test notices. The result is only meaningful if the break actually reached the data.
+
+While proving the stock rebuild test, the cache trigger was mutated to `qty + EXCLUDED.qty * 1.0001` and one of the two tests carried on passing. That test posts movements of 2.25 and -1.5, and `qty` is NUMERIC(12,3): 2.25 x 1.0001 is 2.2502250, which stores as **2.250**. The mutation was rounded away before it was written. The test did not miss a defect — at that scale, there was no defect to miss.
+
+**So a surviving test after a sub-precision mutation says nothing either way, and must not be read as weak coverage.** It is a badly built experiment, not a finding. Recorded because the opposite reading is the tempting one: a test that survives a mutation looks like a test that is not checking anything, and someone would go and "fix" a test that was fine.
+
+**Size the mutation against the column.** For NUMERIC(12,3) that means changing a figure by at least 0.001 at the magnitudes the test actually uses — flip a sign, drop a term, swap an aggregate. The second mutation in that session, `GREATEST` to `LEAST` on `last_ledger_id`, was the useful one: it left every quantity identical and the row-for-row comparison failed on 30 rows, which is what proved that comparison is load-bearing rather than decorative.
+
+The same trap waits on money at NUMERIC(12,2) and on rates at NUMERIC(5,2), where a mutation under half a paisa disappears the same way.
+
+---
+
 ## Open items
 
 | Item | Owner | Blocks |

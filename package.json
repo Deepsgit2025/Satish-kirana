@@ -24,6 +24,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:migrate": "node --env-file-if-exists=.env --import tsx server/src/db/migrate.ts",
+    "db:reconcile": "node --env-file-if-exists=.env --import tsx server/src/reconciliation/run.ts",
     "dev": "node -e \"console.log('No runnable app yet. See docs/build-order.md - step 0 is the skeleton.')\"",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test"
   },
