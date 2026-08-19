@@ -1,0 +1,41 @@
+{
+  "name": "ssbazar",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SS Super Bazar - offline-first supermarket POS, inventory and back office",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22.9.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "server",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "clean": "tsc -b tsconfig.build.json --clean",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx server/src/db/migrate.ts",
+    "dev": "node -e \"console.log('No runnable app yet. See docs/build-order.md - step 0 is the skeleton.')\"",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.13.3",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.12",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.11"
+  }
+}

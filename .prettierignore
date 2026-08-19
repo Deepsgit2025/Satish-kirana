@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Specs are hand-formatted. A formatter churning CLAUDE.md or docs/ makes
+# review diffs unreadable.
+*.md
+docs/
+
+# Migrations are append-only and checksummed once applied. Never reformat them.
+server/migrations/

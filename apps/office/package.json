@@ -1,0 +1,14 @@
+{
+  "name": "@ssbazar/office",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Back office (Electron) - catalogue, purchases, reports",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json"
+  },
+  "dependencies": {
+    "@ssbazar/shared": "*"
+  }
+}

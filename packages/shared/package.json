@@ -1,0 +1,21 @@
+{
+  "name": "@ssbazar/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tax engine, shared types and i18n - used by the server and both apps",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json"
+  }
+}
