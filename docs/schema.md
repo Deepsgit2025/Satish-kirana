@@ -105,7 +105,7 @@ The reference app's Close Books screen resets invoice prefixes each FY. Numberin
 | status | ENUM | `active`, `inactive` |
 
 ### `roles` / `permissions` / `role_permissions` [P1]
-String permission keys: `bill.create`, `bill.void`, `price.edit`, `stock.adjust`, `purchase.create`, `expense.create`, `report.view_all`, `daybook.view`.
+String permission keys: `bill.create`, `bill.void`, `price.edit`, `stock.adjust`, `purchase.create`, `expense.create`, `report.view_all`, `report.view_profit`, `daybook.view`.
 
 The reference app's "All Users" filter on every report implies user attribution everywhere — which the unified `transactions.created_by` gives you for free.
 
@@ -124,7 +124,7 @@ Key-value, typed. Grouped by the reference app's settings tabs so nothing gets l
 
 > `stop_sale_on_negative_stock` — set this **off** for your store. Grocery stock counts drift, and a hard block means the counter refuses to sell an item that's physically in the customer's hand. Warn instead.
 
-> `show_profit_while_billing` — set this **off** on counter devices and on for the office. A cashier seeing margin on every line is a leak waiting to happen. Make it a role permission, not just a global toggle.
+> `show_profit_while_billing` — set this **off** on counter devices and on for the office. A cashier seeing margin on every line is a leak waiting to happen. Gate it by role permission as well — `report.view_profit`, added in `002_report_view_profit.sql`.
 
 ### `document_type_labels` [P2]
 The reference app's "Change Transaction Names" — some shops call it Bill, others Cash Memo or Estimate.
@@ -844,7 +844,9 @@ line_taxable  = round(rate × qty ÷ (1 + total_rate/100), 2)   -- per line
 group_taxable = Σ line_taxable                                 -- then sum
 group_cgst    = round(group_taxable × cgst_rate/100, 2)        -- tax on the GROUP
 ```
-Verified against the reference receipt: 106.67 + 41.91 = 148.58, × 2.5% = 3.71. ✓ Computing tax per line and summing gives 3.72 and the bill stops tying out.
+Verified against the reference receipt: 106.67 + 41.90 = 148.57, × 2.5% = 3.71. ✓ Computing tax per line and summing gives 2.67 + 1.05 = 3.72 and the bill stops tying out.
+
+(The reference read 41.91 / 148.58 until the engine was built in `packages/shared`. It cannot: 148.58 + 3.71 + 3.71 is 156.00, not the 155.99 the receipt prints, and the printed 0.01 round_off disappears. 44.00 ÷ 1.05 = 41.9047… → 41.90.)
 
 **2. Stock changes only via `stock_ledger`.** No `UPDATE products SET qty`. Ever.
 

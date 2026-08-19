@@ -20,7 +20,7 @@ Walk-in cash customers do **not** create party rows — 1,000 bills/day would cr
 `1 BAG = 50 KG` is what makes the repack flow work, and lets a GRN record "2 bags" while the ledger moves 100 kg.
 
 ## D4 — Tax computed on the group, not per line
-Verified against a real D-Mart receipt: 106.67 + 41.91 = 148.58, × 2.5% = 3.71. Per-line-then-sum gives 3.72 and the bill stops tying out. One rounding function, one call site.
+Verified against a real D-Mart receipt: 106.67 + 41.90 = 148.57, × 2.5% = 3.71. Per-line-then-sum gives 3.72 and the bill stops tying out. One rounding function, one call site.
 
 ## D5 — Every line snapshots its own tax, price, name and HSN
 A receipt is a tax document. Rates change (22 Sep 2025 revision), employees leave, products get renamed. A reprint must show what was true on the day. No joins to `tax_slabs` or `products` when rendering.
@@ -109,7 +109,7 @@ Not at data-entry time. Otherwise sales made while someone is counting appear as
 ## D25 — Roles seeded, not left to a wizard
 Cashier (`bill.create` only), Supervisor (+ `bill.void`, `stock.adjust`), Owner (all). Editable configuration, `is_system = false`. Without seeds nobody can log in until someone hand-builds a permission matrix under time pressure — and they'd grant everything to everyone.
 
-`report.view_profit` to be added in 002: profit visibility must be a role permission, not only the global `show_profit_while_billing` toggle.
+`report.view_profit` added in `002_report_view_profit.sql`, granted to Owner only: profit visibility must be a role permission, not only the global `show_profit_while_billing` toggle. It took migration number 002, so the catalog migration planned for that number is now `003_catalog.sql` and stock is `004_stock.sql`.
 
 ---
 

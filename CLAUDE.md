@@ -16,6 +16,12 @@ Full specs in `docs/`. **Read `docs/plan.md` for scope, `docs/schema.md` for tab
 
 ---
 
+## Conventions
+
+- **Join tables use composite primary keys, not surrogate ids.** `role_permissions` is the reference case.
+
+---
+
 ## Non-negotiable invariants
 
 Violating any of these is a bug, even if the code works and tests pass.
@@ -29,7 +35,10 @@ Violating any of these is a bug, even if the code works and tests pass.
    group_cgst    = round(group_taxable × cgst_rate/100, 2)        // tax on the GROUP
    ```
    Tax is computed on the **group**, not per line. Per-line-then-sum gives the wrong answer.
-   Reference: 106.67 + 41.91 = 148.58, × 2.5% = 3.71 ✓
+   Reference: 106.67 + 41.90 = 148.57, × 2.5% = 3.71 ✓ — per line it would be 2.67 + 1.05 = 3.72 ✗
+   (This line read 41.91 / 148.58 until the engine was built. That set cannot hold: 148.58 + 3.71
+   + 3.71 is 156.00, not the 155.99 the receipt prints, and it leaves no 0.01 round_off. 44.00 ÷
+   1.05 = 41.9047…, which is 41.90. Reproduced to the paisa in `packages/shared`.)
 
 2. **Every bill line snapshots its own tax.** `rate`, `cgst_rate`, `hsn_code`, `description` are copied at sale time. **Never join to `tax_slabs` or `products` when rendering or reprinting a document.** Rates change; old bills must reprint with old rates.
 
@@ -78,6 +87,10 @@ Violating any of these is a bug, even if the code works and tests pass.
 20. **Hindi fields are nullable and fall back to English when blank.** `COALESCE(name_hi, name)`.
 
 21. **Receipts render in raster mode only when a line has a Hindi name.** English-only bills use fast text mode. Raster costs 3–4 extra seconds per bill.
+
+### Tests
+
+22. **Never delete or skip the stock ledger rebuild test.** It posts randomised movements, rebuilds `stock_on_hand` from `stock_ledger`, and asserts an exact match. It is the only guard against silent stock drift, which cannot be debugged retroactively.
 
 ---
 
