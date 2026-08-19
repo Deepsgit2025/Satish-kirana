@@ -28,7 +28,9 @@ The highest-value thing to get right early, and independently verifiable.
 
 > Write the tax calculation module in `packages/shared`. Tests first. Rules are CLAUDE.md invariants 1–4.
 >
-> Test case from a real receipt — 5% slab, GST-inclusive prices: line 1 is 1 × ₹112.00, line 2 is 2 × ₹22.00. Expected line taxables 106.67 and 41.91, group taxable 148.58, CGST 3.71, SGST 3.71, group total 155.99, round_off 0.01, net 156.00.
+> Test case from a real receipt — 5% slab, GST-inclusive prices: line 1 is 1 × ₹112.00, line 2 is 2 × ₹22.00. Expected line taxables 106.67 and 41.90, group taxable 148.57, CGST 3.71, SGST 3.71, group total 155.99, round_off 0.01, net 156.00.
+>
+> The line taxables read 41.91 / 148.58 when this step was written, which contradicts the group total below it — 148.58 + 3.71 + 3.71 is 156.00, leaving no round_off. 44.00 ÷ 1.05 = 41.9047…, so the taxable is 41.90 and the group 148.57. Everything else was already right.
 >
 > Also test: a bill with both a 5% and an 18% group; a ₹50 bill-level discount apportioned pro-rata across those groups before tax; tax-exclusive input prices; and a zero-rated line.
 
@@ -38,7 +40,7 @@ The highest-value thing to get right early, and independently verifiable.
 
 ## Step 3 — Catalog schema + tax slab changes
 
-> Write `002_catalog.sql` from `docs/schema.md` section D: categories, hsn_codes, tax_slabs, products, product_barcodes, product_prices, product_locations, product_batches. Include `name_hi` and `short_name_hi` (nullable). Then implement slab resolution: given a product and a datetime, return the slab in force at that moment. Include a test proving a bill dated before 2025-09-22 resolves to the old rate.
+> Write `003_catalog.sql` from `docs/schema.md` section D: categories, hsn_codes, products, product_barcodes, product_prices, product_locations, product_batches. `tax_slabs` already exists — it was created and seeded in `001_foundation.sql` — so **extend** it rather than creating it: add a `slab_group` column so a product's current slab can be walked back to its superseded predecessor (`GST 18%` → the pre-revision `GST 12%` row), and backfill the seeded rows. Include `name_hi` and `short_name_hi` (nullable). Then implement slab resolution: given a product and a datetime, return the slab in force at that moment. Include a test proving a bill dated before 2025-09-22 resolves to the old rate.
 
 **Done when:** a historical date returns historical rates.
 
@@ -82,7 +84,7 @@ The highest-value thing to get right early, and independently verifiable.
 
 ## Step 8 — Locations and receiving *(start of R1)*
 
-> Write `003_stock.sql`: locations, product_locations, rack_assignments, grns, grn_lines, grn_line_putaway, stock_adjustments, stock_transfers.
+> Write `004_stock.sql`: locations, product_locations, rack_assignments, grns, grn_lines, grn_line_putaway, stock_adjustments, stock_transfers.
 >
 > `grn_line_putaway` splits one received line across multiple locations — 100 units received, 40 to a rack, 60 to the godown. Allocations must sum exactly to the line quantity; enforce it. Pre-fill from the product's primary rack so the common case is one keystroke.
 
