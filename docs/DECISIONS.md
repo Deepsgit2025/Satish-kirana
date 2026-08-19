@@ -113,6 +113,76 @@ Cashier (`bill.create` only), Supervisor (+ `bill.void`, `stock.adjust`), Owner 
 
 ---
 
+## D26 — Remote support is designed in from R0, not added later
+Auto-update, structured logging, a diagnostics bundle and a visible version stamp are built before the shop goes live. Every one of them is painful to retrofit into software already running on a counter, and the moment you need them is the moment you cannot ship a build that adds them.
+
+**Remote access is Tailscale**, on the server and both counters. Free tier, works behind NAT, no port forwarding — a private network rather than an inbound hole in the shop's router. AnyDesk and TeamViewer are not options: their free tiers are licensed for personal use only, and this is a client site.
+
+**The WhatsApp panel degrades, never blocks.** The embedded WhatsApp Web view is feature-flagged. It *will* fail to load — WhatsApp changes their web app on their own schedule, so treat this as certain rather than possible. When it does, the send button falls back to opening `https://wa.me/91XXXXXXXXXX?text=<encoded>` in the default browser. The user loses the PDF attachment and keeps the message.
+
+**No workflow may depend on WhatsApp succeeding.** A salary slip or an invoice generates as a PDF regardless of whether any messaging transport is reachable — sending is a separate, optional step. Send failures are logged, so we find out from a diagnostics bundle rather than from a phone call.
+
+---
+
+## D27 — Tax history belongs to the product, not the slab
+**Supersedes the `slab_group` sentence in D15.** Everything else in D15 stands.
+
+D15 said a `slab_group` column would let a current slab walk back to its superseded predecessor — `GST 18%` → the pre-revision `GST 12%`. That mapping does not exist, so the column could only ever have held a guess.
+
+The GST 2.0 rationalisation of 22 Sep 2025 moved **products between slabs**, not slabs into slabs. The 12% band was dismantled item by item: some goods dropped to 5%, others rose to 18%. Two products both sitting on 18% today may have come from 12%, from 28%, or from 18% all along. One predecessor pointer on the slab row would have to be wrong for at least one of them, and no value makes it right for all — the relation is many-to-many and it lives on the product.
+
+So the history is recorded where the change actually happened. **`product_tax_assignments`** (`product_id`, `tax_slab_id`, `effective_from`, `effective_to`, `changed_by`, `reason`) records which slab a product sat on and when, exactly as `product_prices` records what it cost and when. One open row per product, enforced by a partial unique index. Resolution is product + datetime → the assignment in force → its slab → its rates.
+
+Three things follow:
+
+- **`products.tax_slab_id` becomes a cache**, like `employees.advance_balance`. The assignment table is the truth; anything asking a dated question resolves through it rather than reading the column. Never join to either when rendering a document — bill lines still snapshot their own rates (D5).
+- **A future-dated assignment *is* the pending change.** Build-order step 5 wants bulk reassignment to take an `effective_from` and apply on that date via a nightly job. An assignment row starting next month already expresses that, so there is no pending-changes table to build; the nightly job only advances the `products.tax_slab_id` cache to whatever is by then in force.
+- **The test that matters is the forward one.** The shop opens in 2026 and will never hold a bill dated before September 2025, so proving a pre-revision reprint is proving something nobody will ever run. Proving that a rate change dated next month does not leak into today's bills is a bug the shop can actually hit.
+
+---
+
+## D28 — The tax slab cache is enforced, not asserted
+
+`003_catalog.sql` marked `products.tax_slab_id` CACHE ONLY in a column comment. A comment is not enforcement, and two sources of truth with nothing reconciling them is how a product ends up billing at 5% while every report says 18%.
+
+Neither available mechanism is sufficient alone, so there are both.
+
+**A trigger cannot do it by itself.** The case that matters most is a reassignment dated in the future, and at the moment it comes due *nothing writes*. The clock passes midnight; no INSERT, UPDATE or DELETE fires anywhere. There is nothing for a trigger to hook.
+
+**The nightly job cannot do it by itself either.** A reassignment entered to take effect immediately would sit wrong until the small hours. At 1,000 bills a day that is a full day of bills at the wrong rate.
+
+So a trigger on `product_tax_assignments` syncs the cache whenever the assignment in force *right now* changes, and `refresh_product_tax_slab_cache()` advances every product whose in-force assignment has moved on — the future-dated rows coming due. Both read `product_tax_assignment_at(product_id, at)`, which is the single definition of "in force" in the system. The TypeScript resolver calls it too, so the half-open period rule is written once and cannot drift between the trigger, the job and the till.
+
+Disagreement is made visible rather than assumed away. `product_tax_cache_drift` lists every product where the cache and the in-force assignment differ. That view is what the nightly job corrects and what a test asserts is empty — the same shape as the `stock_on_hand` rebuild check (CLAUDE.md invariant 22), for the same reason: a cache nobody reconciles is a cache that is quietly wrong, and nobody finds out from the software.
+
+This took migration number 004, so stock becomes `005_stock.sql`. Three comments inside `003_catalog.sql` point at `004_stock.sql` and cannot be corrected — that file is applied, therefore frozen. `004` restates the affected column comment in the database, where support actually reads it.
+
+---
+
+## D29 — The seeded slab dates are right about rates and wrong about history
+
+`001_foundation.sql` seeds 0%, 5%, 18% and 40% with `effective_from = 2025-09-22`, and closes 12% and 28% the day before. The rates are correct. The dating is not, for three of them.
+
+Only 12% and 28% were abolished in the GST 2.0 rationalisation. 0%, 5% and 18% existed at those same rates before it and simply carried on, so their true `effective_from` is 2017-07-01 — the same date the two superseded rows already carry. As seeded, resolving any of those three against a date before 22 Sep 2025 returns nothing, when it should return the identical rate.
+
+**Left as it is, deliberately.** The shop opens in 2026 and cannot hold a document dated before the revision, so nothing resolves into the gap; and `001_foundation.sql` is applied, therefore frozen. Correcting it for its own sake would mean a migration that changes nothing observable.
+
+**Correct it in passing.** The next migration that touches `tax_slabs` for a real reason should move those three rows back to 2017-07-01 and say why. Until then this entry is the record that the gap is known, so nobody rediscovers it as a bug.
+
+---
+
+## D30 — Reconciliation jobs report to one health surface
+
+Every derived value in this system has a job that checks it against the truth it was derived from: `product_tax_cache_drift` against `product_tax_assignments` (D28), the `stock_on_hand` rebuild against `stock_ledger` (CLAUDE.md invariant 22, build-order step 4), and the monthly restore verification against the backups (D22).
+
+**They all report to one place** — a health panel on the office dashboard, showing per check: when it last ran, and how much outstanding drift it found. Not a log line, not an email, not a red banner that only appears on the day something breaks. A check that has not run for nine days has to look as wrong as a check that found drift, and only a surface showing last-run time makes that visible.
+
+Three jobs each reporting somewhere different is three jobs nobody reads, and the shop finds out from a customer instead. One surface also fixes the ordering problem: after a refresh, anything still listed is by definition the part no job can fix, which is exactly what wants a human.
+
+`product_tax_cache_drift` is the first entry on it. The `stock_on_hand` check is the second, and it lands with step 4 — so the panel gets built once there are two things to put on it, rather than as scaffolding for one.
+
+---
+
 ## Open items
 
 | Item | Owner | Blocks |

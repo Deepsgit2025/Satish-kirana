@@ -99,6 +99,17 @@ Violating any of these is a bug, even if the code works and tests pass.
 - **Tests before implementation** for anything touching money, tax, stock or payroll. Everything else can be tested after.
 - **One module per session.** Don't let a task sprawl across the codebase.
 - **Migrations are append-only.** Never edit a committed migration; add a new one.
+- **An applied migration is immutable, comments included.** Once a file has run against any
+  database — a developer laptop counts — it is frozen. Not the SQL, not a typo in a comment, not
+  a stale doc reference in the header. The runner stores a SHA-256 of every applied file and
+  refuses to run when one changes, so an edit does not correct history, it stops the next
+  deploy. Corrections go in the next migration, which says what it supersedes.
+- **Postgres `now()` is the transaction timestamp, not the wall clock.** It is fixed at BEGIN and
+  does not advance while the transaction runs. In a rolled-back test, anything meant to be
+  already in force has to be dated *before* the transaction opened — a fresh `new Date()` is in
+  the future as far as any trigger reading `now()` is concerned, so the row it should have
+  matched does not match. Day-close, salary runs and backup verification all straddle this, and
+  all three are places where being an hour out is a real figure on a real document.
 - **No new dependency without asking.** This runs unattended in a shop for years.
 - **When a spec is ambiguous, stop and ask.** Don't invent business rules — most of them have a reason documented in `docs/schema.md`.
 

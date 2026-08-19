@@ -4,19 +4,17 @@ import {
   MigrationPlanError,
   planMigrations,
 } from './migration-plan.js';
+import type { Queryable } from './queryable.js';
 
 /**
  * Applies pending migrations against a single Postgres session.
  *
- * The database is reached through the narrow `Queryable` interface below rather
- * than a `pg.Client` directly, so the whole apply loop - transaction
- * boundaries, locking, bookkeeping - is testable without a live server.
+ * The database is reached through the narrow `Queryable` interface rather than a
+ * `pg.Client` directly, so the whole apply loop - transaction boundaries,
+ * locking, bookkeeping - is testable without a live server.
  */
 
-/** The slice of `pg.Client` this module needs. */
-export interface Queryable {
-  query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }>;
-}
+export type { Queryable };
 
 /** A migration file plus its contents. */
 export interface MigrationSource {

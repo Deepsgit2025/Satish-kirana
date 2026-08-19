@@ -241,7 +241,7 @@ Self-referencing: `id`, `parent_id`, `name`, `path`.
 | short_name | VARCHAR(30) | **prints on 80mm receipt** — set manually |
 | category_id | FK | |
 | hsn_code | FK | |
-| tax_slab_id | FK | current slab |
+| tax_slab_id | FK | **cache** of the slab in force now — history is `product_tax_assignments` |
 | base_unit_id | FK → units | |
 | secondary_unit_id | FK → units NULL | |
 | product_kind | ENUM | `standard`, `bulk`, `repacked` |
@@ -274,6 +274,19 @@ Self-referencing: `id`, `parent_id`, `name`, `path`.
 
 Partial unique index: one open row per product.
 
+### `product_tax_assignments` [P1]
+`id`, `product_id`, `tax_slab_id`, `effective_from TIMESTAMPTZ`, `effective_to`, `changed_by`, `reason`.
+
+Partial unique index: one open row per product.
+
+Which slab a product sits on, and when — the same shape as `product_prices`, because a rate change is a dated event on a product rather than an edit to a column. Resolution is **product + datetime → the assignment in force → its slab → its rates**, and the assignment is the authority on which slab, not `products.tax_slab_id`.
+
+There is no slab-to-slab history and there cannot be. The GST 2.0 rationalisation moved products *between* slabs, not slabs into slabs: a product on 12% became 5% or 18% depending on what it was, so the change lives on the product and nowhere else. See `DECISIONS.md` D27.
+
+A row dated in the future **is** a pending reassignment — there is no separate pending-changes table for the nightly job in build-order step 5 to read.
+
+`products.tax_slab_id` is a cache of this table, and enforced as one: a trigger syncs it when an assignment takes effect immediately, `refresh_product_tax_slab_cache()` advances it when a future-dated one comes due, and the `product_tax_cache_drift` view reports any product where the two disagree. All three in `004_product_tax_cache.sql`.
+
 ### `product_locations` [P1]
 `id`, `product_id`, `location_id`, `is_primary_face`, `capacity`.
 
@@ -286,6 +299,7 @@ First-class batches, not loose columns on lines. Without this you cannot produce
 | product_id | FK | |
 | batch_no | VARCHAR(30) | supplier's, or generated for repacks |
 | mfg_date / expiry_date | DATE NULL | |
+| packed_on | DATE NULL | month and year of packing — see below |
 | repack_batch_id | FK NULL | links a packed lot to its repack run |
 | grn_txn_id | FK NULL | which purchase brought it in |
 | cost_rate | NUMERIC(12,2) | this lot's landed cost |
@@ -295,6 +309,10 @@ First-class batches, not loose columns on lines. Without this you cannot produce
 | status | ENUM | `active`, `expired`, `exhausted`, `blocked` |
 
 Unique on `(product_id, batch_no)`. `transaction_lines.batch_id` and `stock_ledger.batch_id` replace the loose `batch_no` text columns.
+
+> **`packed_on` is not a second `mfg_date`.** This section omitted it while section K sourced the label's "month and year of packing" from it; it exists as of `003_catalog.sql`. The manufacturing date is the maker's and the packing date is the shop's — for a repack they can be months apart, and the label declares the packing one.
+>
+> It is a full DATE rather than a month and year because Legal Metrology Rule 6 requires the full date when shelf life is under three months. You can always render less precision than you stored; you can never render more.
 
 **Turn batches on selectively.** `products.track_batches` defaults to FALSE. Enable it for perishables (dairy, bakery, packaged food nearing shelf life) and everything `repacked`. For shampoo and steel scrubbers it's pointless overhead.
 

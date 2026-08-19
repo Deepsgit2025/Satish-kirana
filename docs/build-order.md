@@ -4,6 +4,8 @@ Ordered steps for R0 and R1. Each step is one Claude Code session. **Do not skip
 
 Review what lands before moving on. At high output volume it is easy to accumulate code nobody has read, and this system runs unattended in a shop for years.
 
+**Step numbers are not stable.** Inserting a step renumbers every step after it, and a migration that quoted one is frozen and cannot follow. Migration filenames are the stable reference; read a step number in SQL as a hint about intent, not a pointer.
+
 ---
 
 ## Step 0 — Project skeleton
@@ -38,11 +40,17 @@ The highest-value thing to get right early, and independently verifiable.
 
 ---
 
-## Step 3 — Catalog schema + tax slab changes
+## Step 3 — Catalog schema + product tax history
 
-> Write `003_catalog.sql` from `docs/schema.md` section D: categories, hsn_codes, products, product_barcodes, product_prices, product_locations, product_batches. `tax_slabs` already exists — it was created and seeded in `001_foundation.sql` — so **extend** it rather than creating it: add a `slab_group` column so a product's current slab can be walked back to its superseded predecessor (`GST 18%` → the pre-revision `GST 12%` row), and backfill the seeded rows. Include `name_hi` and `short_name_hi` (nullable). Then implement slab resolution: given a product and a datetime, return the slab in force at that moment. Include a test proving a bill dated before 2025-09-22 resolves to the old rate.
+> Write `003_catalog.sql` from `docs/schema.md` section D: categories, hsn_codes, products, product_barcodes, product_prices, product_locations, product_batches, product_tax_assignments. Include `products.name_hi`, `products.short_name_hi` and `categories.name_hi`, all nullable, plus the labelling columns from `docs/DECISIONS.md` D16.
+>
+> `tax_slabs` already exists — created and seeded in `001_foundation.sql` — and is **not** touched here. This step used to ask for a `slab_group` column so a product's current slab could be walked back to its superseded predecessor. It cannot work: the GST 2.0 rationalisation moved products between slabs, not slabs into slabs, so there is no slab-to-slab predecessor to record. See `docs/DECISIONS.md` D27.
+>
+> Tax history is **per product** instead. `product_tax_assignments` (product_id, tax_slab_id, effective_from, effective_to, changed_by, reason) follows the `product_prices` pattern, with a partial unique index allowing one open row per product. Resolution: product + datetime → the assignment in force → its slab → its rates.
+>
+> **Test the forward case, not the historical one.** This shop opens in 2026 and will never hold a bill dated before the September 2025 revision, so a pre-revision reprint test asserts something nobody will ever run. What matters is a rate change ahead of us: assign a product to 5%, then add an assignment moving it to a new 8% slab effective next month. Assert it resolves to 5% today, 8% after that date, and that nothing changes until the date arrives.
 
-**Done when:** a historical date returns historical rates.
+**Done when:** a future-dated slab change resolves on its date and not one moment before.
 
 ---
 
@@ -51,6 +59,8 @@ The highest-value thing to get right early, and independently verifiable.
 > Implement the stock ledger per `docs/schema.md` section G. Append-only, no UPDATE or DELETE. `stock_on_hand` maintained by trigger.
 >
 > Include a test that posts 100 randomised movements across 5 products and 3 locations, then rebuilds `stock_on_hand` from scratch from the ledger and asserts it matches the trigger-maintained values exactly.
+>
+> Use the step 3 harness — `server/src/testing/database.ts`: a real Postgres, every test inside a transaction that rolls back. Not optional here. The thing under test *is* the trigger, so a fake that answers the question has reimplemented the trigger, and the test then proves the reimplementation right rather than the schema.
 
 **Done when:** the rebuild test passes. This test is the safety net for the entire project — never let it be deleted or skipped.
 
@@ -78,19 +88,41 @@ The highest-value thing to get right early, and independently verifiable.
 
 > Implement WAL archiving and a nightly compressed `pg_dump` to a local directory, with 7-day retention. Add a `restore-verify` script that restores a dump to a scratch database and asserts row counts and that `stock_on_hand` equals the sum of `stock_ledger`.
 
+---
+
+## Step 8 — Remote support foundations
+
+These are R0, built before the shop goes live. Retrofitting them into software already running in a shop is painful — the day you need logs is the day you cannot ship a build that writes them.
+
+Auto-update is the sharpest case. The very first build installed in the shop has to already know how to update itself; if it does not, there is no remote path to the second build, and every fix after it is delivered by hand.
+
+> Build the four things that make supporting this system from another city possible.
+>
+> **Auto-update.** `electron-updater` against a signed release feed. Counters check for updates **at startup only** and apply them **at day-close — never mid-day**. A billing terminal restarting during the evening rush is worse than the bug being fixed. The office app may update on restart.
+>
+> **Structured logging.** JSON lines, rotated, on every device. Log level configurable via `app_settings`. **Never log card numbers, full customer phone numbers, or passwords.**
+>
+> **Diagnostics bundle.** A "Send diagnostics" button that packages recent logs, sync outbox state, app version, device code and last successful backup time into one file the owner can send. This is the alternative to debugging by phone with a shop owner reading error text aloud.
+>
+> **Version stamp** visible in the UI on every device, so "which version are you on" is answerable.
+
+**Done when:** an update offered mid-day installs at day-close and not before; a diagnostics bundle from a counter is enough to diagnose a sync failure without a phone call, and contains no card numbers, full phone numbers or passwords; and every device shows its version on screen.
+
 **End of R0.** The shop has no software it can use yet, but everything after this sits on it.
 
 ---
 
-## Step 8 — Locations and receiving *(start of R1)*
+## Step 9 — Locations and receiving *(start of R1)*
 
-> Write `004_stock.sql`: locations, product_locations, rack_assignments, grns, grn_lines, grn_line_putaway, stock_adjustments, stock_transfers.
+> Write `005_stock.sql`: locations, rack_assignments, grns, grn_lines, grn_line_putaway, stock_adjustments, stock_transfers. `product_locations` was created in `003_catalog.sql` with `location_id` left unconstrained because `locations` did not exist yet — add the foreign key here.
+>
+> Stock is `005`, not `004`: enforcing the `products.tax_slab_id` cache took `004_product_tax_cache.sql`. Three comments inside `003_catalog.sql` still say the locations FK arrives in `004_stock.sql`. They are wrong and they stay wrong — 003 is applied, so it is frozen (CLAUDE.md). `004` corrects the column comment in the database itself.
 >
 > `grn_line_putaway` splits one received line across multiple locations — 100 units received, 40 to a rack, 60 to the godown. Allocations must sum exactly to the line quantity; enforce it. Pre-fill from the product's primary rack so the common case is one keystroke.
 
 ---
 
-## Step 9 — GRN entry screen
+## Step 10 — GRN entry screen
 
 > Build goods receipt entry: supplier, invoice number and date, lines with batch and expiry, cost rate, tax, and the put-away split. Posts to `stock_ledger` and `party_ledger` in a single transaction. Header-level godown selector that defaults every line.
 
@@ -98,7 +130,7 @@ The highest-value thing to get right early, and independently verifiable.
 
 ---
 
-## Step 10 — Rack assignment and count sheets
+## Step 11 — Rack assignment and count sheets
 
 His main theft-control mechanism.
 
