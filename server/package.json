@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
     "db:migrate": "node --env-file-if-exists=../.env --import tsx src/db/migrate.ts",
-    "db:reconcile": "node --env-file-if-exists=../.env --import tsx src/reconciliation/run.ts"
+    "db:reconcile": "node --env-file-if-exists=../.env --import tsx src/reconciliation/run.ts",
+    "catalogue:import": "node --env-file-if-exists=../.env --import tsx src/catalog/import-cli.ts"
   },
   "dependencies": {
     "@ssbazar/shared": "*",

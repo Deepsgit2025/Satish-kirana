@@ -1,3 +1,4 @@
+import { assignProductSlab } from '../catalog/product-history.js';
 import type { Queryable } from '../db/queryable.js';
 
 /**
@@ -96,12 +97,10 @@ export async function seedProduct(db: Queryable, options: SeedProductOptions): P
 }
 
 /**
- * Records a slab change the way the product master has to: close the open
- * assignment at the instant the new one starts, then open the new one there.
- * Closing first is what keeps the one-open-row index satisfied, and leaves no
- * gap for a bill to fall into.
- *
- * `from` in the future is a pending reassignment - nothing about today changes.
+ * Records a slab change through the same helper production code uses. Kept as a
+ * fixture only for the shorter positional signature; the close-then-open logic
+ * itself lives in `catalog/product-history.ts`, so a test can never pass against
+ * a path the importer and the edit screen do not take.
  */
 export async function assignSlab(
   db: Queryable,
@@ -110,18 +109,7 @@ export async function assignSlab(
   from: Date,
   reason: string,
 ): Promise<void> {
-  await db.query(
-    `UPDATE product_tax_assignments
-        SET effective_to = $2
-      WHERE product_id = $1 AND effective_to IS NULL`,
-    [productId, from],
-  );
-
-  await db.query(
-    `INSERT INTO product_tax_assignments (product_id, tax_slab_id, effective_from, reason)
-     VALUES ($1, $2, $3, $4)`,
-    [productId, taxSlabId, from, reason],
-  );
+  await assignProductSlab(db, { productId, taxSlabId, effectiveFrom: from, reason });
 }
 
 /** `products.tax_slab_id` - the cache, read directly rather than resolved. */

@@ -1,0 +1,7 @@
+barcode,name,name_hi,short_name,hsn_code,tax_rate,mrp,sale_price,purchase_price,unit,category,reorder_level
+8901234567890,Basmati Rice 5 kg,बासमती चावल 5 किग्रा,RICE BAS 5KG,100630,5,520.00,495.00,410.00,Kg,Grocery,10
+8901234567906,Chakki Fresh Atta 10 kg,आटा 10 किग्रा,ATTA 10KG,110100,5,460.00,449.00,395.00,Kg,Grocery,15
+8901234567913,"Sunflower Oil, Refined 1 L",रिफाइंड तेल 1 ली,OIL SF 1L,151219,5,185.00,179.00,158.00,Ltr,Grocery,24
+8901234567920,Bath Soap 100 g,,SOAP 100G,340111,18,45.00,42.00,33.50,Pcs,Personal Care,48
+8901234567937,Iodised Salt 1 kg,नमक 1 किग्रा,SALT 1KG,250100,0,28.00,26.00,22.00,Kg,Grocery,30
+8901234567944,Steel Scrubber,,SCRUBBER,732392,18,25.00,25.00,18.00,Pcs,Household,12

@@ -68,13 +68,21 @@ The highest-value thing to get right early, and independently verifiable.
 
 ---
 
-## Step 5 — Product master + CSV import
+## Step 5 — Catalogue import core (headless)
 
-> Build the product master screen and CSV import in apps/office. Import must: validate 6-digit HSN, reject duplicate barcodes, report row-level errors without aborting the whole file, and support an optional `name_hi` column. Add bulk edit for price, tax slab and category.
+No UI. The client is keying several thousand SKUs into a spreadsheet now, and needs to know what is wrong with it long before there is a screen to look at (`docs/DECISIONS.md` D34).
+
+> A CSV parser and validator producing a row-level error report, plus a loader that inserts the valid rows. Columns: `barcode`, `name`, `name_hi` (optional), `short_name`, `hsn_code`, `tax_rate`, `mrp`, `sale_price`, `purchase_price`, `unit`, `category`, `reorder_level`.
 >
-> Bulk tax reassignment takes an `effective_from` date and does not apply immediately — pending changes are applied by a nightly job. When reassigning a slab, offer two options: keep MRP (absorb the tax change) or recompute MRP (pass it on).
+> Validation: HSN exactly 6 digits; barcodes unique within the file and against `product_barcodes`; `sale_price` and `mrp` positive; `unit` resolves against the units master; `tax_rate` resolves to a slab in force. Unknown categories are **created, not rejected** — `category_id` is nullable and blocking an import on an unfinished category tree helps nobody.
+>
+> **Errors are row-level and never fatal.** A 2,000-row file with 30 bad rows imports 1,970 and reports 30, with line numbers and reasons. The whole file is never abandoned over one row.
+>
+> Loading a product writes its `product_tax_assignments` row through the same close-then-open helper the edit screen will use, so the two cannot diverge.
+>
+> `npm run catalogue:import -- <file> [--dry-run]`. Dry run validates and reports without writing, which is what the client runs against his spreadsheet.
 
-**Done when:** a 2,000-row CSV imports with a clear error report, and a future-dated slab change applies on the right date and not before.
+**Done when:** a 2,000-row file with deliberate errors imports the good rows and reports the bad ones by line number, and `--dry-run` writes nothing.
 
 ---
 
@@ -86,13 +94,25 @@ The highest-value thing to get right early, and independently verifiable.
 
 ---
 
-## Step 7 — Local backup
+## Step 7 — Product master screen
+
+The first screen in the system, which is why it comes after i18n rather than before it.
+
+> Build the product master and the import UI in apps/office on top of the step 5 core: browse, search, create and edit a product, and run an import with its error report on screen. Add bulk edit for price, tax slab and category.
+>
+> Bulk tax reassignment takes an `effective_from` date and does not apply immediately — a future-dated `product_tax_assignments` row is the pending change, and the nightly job advances the cache on the day (`docs/DECISIONS.md` D27). When reassigning, offer keep-MRP (absorb the tax change) or recompute-MRP (pass it on).
+
+**Done when:** a product can be created, edited and bulk-reassigned from the screen, every string comes from `en.json` / `hi.json`, and a future-dated slab change applies on the right date and not before.
+
+---
+
+## Step 8 — Local backup
 
 > Implement WAL archiving and a nightly compressed `pg_dump` to a local directory, with 7-day retention. Add a `restore-verify` script that restores a dump to a scratch database and asserts row counts and that `stock_on_hand` equals the sum of `stock_ledger`.
 
 ---
 
-## Step 8 — Remote support foundations
+## Step 9 — Remote support foundations
 
 These are R0, built before the shop goes live. Retrofitting them into software already running in a shop is painful — the day you need logs is the day you cannot ship a build that writes them.
 
@@ -114,9 +134,9 @@ Auto-update is the sharpest case. The very first build installed in the shop has
 
 ---
 
-## Step 9 — Racks and receiving *(start of R1)*
+## Step 10 — Racks and receiving *(start of R1)*
 
-> Write `008_receiving.sql`: rack_assignments, grns, grn_lines, grn_line_putaway, stock_adjustments, stock_transfers.
+> Write `009_receiving.sql`: rack_assignments, grns, grn_lines, grn_line_putaway, stock_adjustments, stock_transfers.
 >
 > `locations` is already here — `007_locations.sql` brought it forward with the three foreign keys that were waiting on it, so no location id anywhere is unconstrained. `rack_assignments` was left behind because it needs employees and date ranges and has its own screen.
 >
@@ -126,7 +146,7 @@ Auto-update is the sharpest case. The very first build installed in the shop has
 
 ---
 
-## Step 10 — GRN entry screen
+## Step 11 — GRN entry screen
 
 > Build goods receipt entry: supplier, invoice number and date, lines with batch and expiry, cost rate, tax, and the put-away split. Posts to `stock_ledger` and `party_ledger` in a single transaction. Header-level godown selector that defaults every line.
 
@@ -134,7 +154,7 @@ Auto-update is the sharpest case. The very first build installed in the shop has
 
 ---
 
-## Step 11 — Rack assignment and count sheets
+## Step 12 — Rack assignment and count sheets
 
 His main theft-control mechanism.
 

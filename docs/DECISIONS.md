@@ -225,6 +225,48 @@ The same trap waits on money at NUMERIC(12,2) and on rates at NUMERIC(5,2), wher
 
 ---
 
+## D34 — i18n before the first screen, and the import core before both
+
+Two reorderings of the build, for two different reasons.
+
+**i18n moves ahead of the product master screen.** Invariant 19 says every user-facing string comes from `en.json` / `hi.json`, and step 6 ends with a lint rule that fails the build on a hardcoded one. Building the first screen before that rule exists means writing several hundred strings the wrong way and then retrofitting them — which is not a mechanical job, because retrofitting is where you discover that a string was assembled from fragments, or interpolated mid-sentence in a way Hindi word order will not take. The rule has to be in place before there is anything for it to catch, or its first run is a wall of failures nobody has time to read properly.
+
+**The product master splits in two: the import core, then the screen.** They are not one piece of work. The core is pure validation logic over a file — parse, check, report, load — and needs no application. The screen needs an Electron app that does not exist yet, i18n, and a component library. Bundling them means the validation rules cannot be finished until the app is standing up.
+
+**The core ships first because the client is entering the catalogue right now.** Several thousand SKUs are being keyed into a spreadsheet while this is being built. Every day that passes without a validator is another day of rows accumulating a wrong HSN length, a duplicate barcode or a unit that does not exist — and those errors are cheapest to fix while he still remembers the row and most expensive to fix in bulk afterwards. `npm run catalogue:import -- file.csv --dry-run` gives him that feedback with no UI at all, and it is the same code path the screen will call later.
+
+Splitting also means the import is testable as a pure function of a file plus the database, rather than through a screen. That is the difference between a validator with a hundred cases and a validator with the three someone clicked through.
+
+---
+
+## D35 — `sale_price` above `mrp` is a validation failure, not a pricing choice
+
+The catalogue import rejects any row whose sale price exceeds its MRP. This is **not** a policy the shop can decide to relax.
+
+MRP is the *maximum* retail price, printed on the packet under the Legal Metrology (Packaged Commodities) Rules. Selling above it is an offence — not a sharp practice, not a margin decision, an offence with a penalty attached. A system that accepted the row would be a system that helped commit it at 1,000 bills a day, silently, for as long as the row sat in the catalogue.
+
+So it belongs with "HSN must be six digits" rather than with "we do not usually discount below cost". A row that fails it is broken data and is reported like any other broken row, with its line number and reason. **No setting turns it off**, and nothing downstream should be built to override it.
+
+The same rule already governs labels from the other direction: D16 allows a reprinted sticker to *lower* an MRP and never to raise one, and forbids covering the original declaration. Both are the same principle — the printed maximum is a ceiling the software may approach and never cross.
+
+Where a supplier genuinely raises the MRP on a new lot, the fix is to correct the MRP, not to let the sale price float above the old one. `product_batches.mrp` exists because MRP moves between deliveries.
+
+---
+
+## D36 — The CSV parser is ours, and stays that way
+
+The catalogue import reads CSV with about eighty lines of hand-written parser rather than a library. Deliberate, and worth restating because "why not just use csv-parse" is the obvious question and the obvious answer is wrong here.
+
+**The grammar is four rules.** Fields split on commas; a field may be quoted; a quote inside a quoted field is doubled; a quoted field may span lines. That is the whole of RFC 4180 that matters. Everything else the parser does — stripping Excel's byte order mark, tolerating CRLF, skipping blank rows, tracking the physical line each record began on — is either a line of code or the reason the file exists.
+
+**It is tested rather than trusted.** Fifteen cases covering exactly what Excel on Windows produces, including the one that actually matters: a quoted newline advancing the line counter, so an error on the following row reports the line the client sees in the spreadsheet gutter and not one earlier.
+
+**The dependency rule is worth more than the convenience.** This runs unattended in a shop for years, on machines nobody will be maintaining attentively. Every package added is a package that can need a security update on a Tuesday, and the cost of that is paid at a counter in another city. A parser that has not changed since it was written and is covered by its own tests has a maintenance cost of zero.
+
+The trade is real and small: a library would handle delimiters other than the comma, and encodings other than UTF-8. Neither is in scope — the client's file is comma-separated UTF-8 from Excel, and if that ever stops being true it is a change of requirement, not a bug to patch around.
+
+---
+
 ## Open items
 
 | Item | Owner | Blocks |
