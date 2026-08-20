@@ -267,6 +267,48 @@ The trade is real and small: a library would handle delimiters other than the co
 
 ---
 
+## D37 — Open Food Facts is a lookup that pre-fills a form, never an import
+
+A local reference table is seeded from the Open Food Facts India export — barcode, product name, brand, category, and nothing else. When an unknown barcode is scanned during catalogue entry or receiving, the shop is offered a pre-filled name and brand to **accept or override**. That is the whole of it.
+
+**It is not an import and must never be built as one.** Coverage of Indian products is patchy and the data is crowd-sourced, so a name arrives spelled how one contributor felt like spelling it — abbreviated, in the wrong case, with the pack size glued on or missing entirely. Every suggested name is reviewed by the person at the keyboard before it becomes a catalogue row. A bulk load would put thousands of unreviewed names into the master and the review would then never happen, because there would be nothing to prompt it.
+
+**The shop's own numbers never come from it.** MRP, sale price, HSN and tax rate are the shop's, always, without exception. Open Food Facts has no authority over any of them and several are legally the shop's responsibility (D14, D35). The lookup fills in the two fields that are tedious to type and factually stable — what the product is called and who makes it — and stops.
+
+**Worth doing before the client's bulk catalogue entry.** Several thousand SKUs are being keyed in by hand right now (D34). Name and brand are the bulk of the typing on every row, and a scan that fills both removes a large share of the work at exactly the moment the work is happening. After the catalogue is entered, the same lookup keeps earning its place on every new product that arrives.
+
+**The internal barcode decision stands: Code 128 with a configurable prefix, not EAN-13.** Restated here because a catalogue seeded with real EAN-13 barcodes invites the question of whether internal codes should match the format around them. They should not:
+
+- **No check digit maths.** EAN-13's thirteenth digit is computed, and every place that generates, validates or hand-enters a code has to get it right. Code 128 has none of that.
+- **Variable length.** Internal codes can carry a prefix and a running number without being padded into a fixed thirteen digits.
+- **It avoids the 20–29 in-store range.** EAN-13 reserves that prefix band for in-store use, which is also where **scale-printed embedded-weight barcodes** live — the ones where digits inside the code carry a weight or a price. Minting internal codes there means the day a weighing scale or a supplier's pre-packed label enters the shop, a code that reads as a product on one machine reads as a weight on another. Staying off EAN-13 entirely makes the collision impossible rather than unlikely.
+
+`product_barcodes.barcode_type` already distinguishes `ean13`, `code128_internal` and `manual`, so a scanned Open Food Facts match and a printed internal label are never confused for one another.
+
+---
+
+## D38 — Scan-to-create for unknown barcodes, with the form set by role
+
+An unknown barcode at a scanner is an opportunity, not a dead end. Today the scan fails and the person is left to go and add the product somewhere else — which in practice means a sale rung up under a wrong item, or a delivery received short. So an unknown barcode offers to create the product. **What the form asks for depends on who is scanning and where.**
+
+**GRN entry (R1, office): the full create form.** Name, unit, HSN, tax rate, MRP, sale price, cost — all of it, because the supplier invoice is in the operator's hand at that moment and every one of those figures is on it or derivable from it. This is the natural way the catalogue grows once the initial import (D34) is behind us: goods arrive, the product is created properly at the point where the paperwork exists.
+
+**Billing counter (R2): barcode, name and quantity. No price field.** Cashiers hold `bill.create` and explicitly not `price.edit` (D25), and the till form must reflect that exactly. The product enters a **pending** queue and cannot be billed until someone holding `price.edit` prices it — either a supervisor overriding at the till, or the office machine later.
+
+**A price field at the counter is a leak with a UI.** A cashier who types ₹40 for a ₹60 item has not left a discount, a void or an adjustment behind — there is no record that the figure was ever wrong, because the figure they entered *is* the product's price from that moment on. Nothing downstream can detect it: the bill balances, the stock moves, the margin report shows a thin margin on a product that has always had one. Every other way of getting money out of this system leaves a trace that a report can find. This one would not, which is why the field does not exist rather than being restricted, warned about or logged.
+
+**Pending products need a distinct status of their own.** `products.status` is `active | discontinued` today; unpriced products are neither. They must:
+
+- appear in a **review list** so pricing them is a visible outstanding job, not something discovered when a cashier next scans the item;
+- be **excluded from stock valuation** — a product with no price would otherwise value at zero and quietly understate the stock figure;
+- be **excluded from reorder reports**, which would otherwise propose reordering something nobody has decided to sell yet.
+
+Marking them inactive would hide them; leaving them active would let them be billed at a price nobody set. Hence a third state.
+
+**D37 and D38 are two halves of the same moment.** The barcode is scanned and does not match: the lookup pre-fills what it knows about the packet, scan-to-create handles everything the lookup cannot know — which is every field that is the shop's own.
+
+---
+
 ## Open items
 
 | Item | Owner | Blocks |
