@@ -23,6 +23,7 @@ import { recordReconciliationRun, type ReconciliationStatus } from './health.js'
  */
 
 export const PRODUCT_TAX_CACHE_CHECK = 'product_tax_cache';
+export const PRODUCT_PRICE_CACHE_CHECK = 'product_price_cache';
 export const STOCK_ON_HAND_CHECK = 'stock_on_hand';
 
 export interface ReconciliationOutcome {
@@ -151,10 +152,44 @@ export async function runProductTaxCacheCheck(db: Queryable): Promise<Reconcilia
 }
 
 /**
+ * `products.sale_price` / `mrp` against the price in force. Corrects, for the
+ * same reason the tax cache check does: drift here is a future-dated price
+ * coming due, not evidence that anything is broken.
+ *
+ * It is the other half of a bulk tax reassignment that was passed on rather
+ * than absorbed (build-order step 7). The slab moves on its date through
+ * `product_tax_cache`; without this, the price recorded alongside it on the
+ * same date would never reach the column the counters bill from.
+ */
+export async function runProductPriceCacheCheck(db: Queryable): Promise<ReconciliationOutcome> {
+  return runCheck(db, PRODUCT_PRICE_CACHE_CHECK, async () => {
+    const corrected = await scalarInt(db, `SELECT refresh_product_price_cache() AS n`);
+    const outstanding = await scalarInt(
+      db,
+      `SELECT count(*)::int AS n FROM product_price_cache_drift`,
+    );
+
+    return {
+      outstanding,
+      corrected,
+      detail: outstanding === 0 ? null : `${String(outstanding)} product(s) with no price in force`,
+    };
+  });
+}
+
+/**
  * Every check, in order, each recording its own run. Runs them all even when
  * one reports drift or fails: a partial panel is worse than a bad one, because
  * the checks that did not report look like checks that passed.
+ *
+ * The two cache checks run before `stock_on_hand` and in that order because a
+ * price is read against the slab in force; nothing depends on the ordering
+ * being exact, but a panel read top to bottom should tell the story that way.
  */
 export async function runAllReconciliationChecks(db: Queryable): Promise<ReconciliationOutcome[]> {
-  return [await runProductTaxCacheCheck(db), await runStockOnHandCheck(db)];
+  return [
+    await runProductTaxCacheCheck(db),
+    await runProductPriceCacheCheck(db),
+    await runStockOnHandCheck(db),
+  ];
 }

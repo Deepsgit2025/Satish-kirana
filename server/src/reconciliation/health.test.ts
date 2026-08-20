@@ -6,6 +6,7 @@ import { inSavepoint, withRollback } from '../testing/database.js';
 import { seedLocation } from '../testing/stock-fixtures.js';
 import { postStockMovement } from '../stock/stock-ledger.js';
 import {
+  PRODUCT_PRICE_CACHE_CHECK,
   PRODUCT_TAX_CACHE_CHECK,
   runAllReconciliationChecks,
   runProductTaxCacheCheck,
@@ -93,10 +94,10 @@ describe('reconciliation health', () => {
     await withRollback(async (db) => {
       const outcomes = await runAllReconciliationChecks(db);
 
-      expect(outcomes.map((outcome) => outcome.status)).toEqual(['ok', 'ok']);
+      expect(outcomes.map((outcome) => outcome.status)).toEqual(['ok', 'ok', 'ok']);
 
       const health = await readReconciliationHealth(db);
-      for (const key of [PRODUCT_TAX_CACHE_CHECK, STOCK_ON_HAND_CHECK]) {
+      for (const key of [PRODUCT_TAX_CACHE_CHECK, PRODUCT_PRICE_CACHE_CHECK, STOCK_ON_HAND_CHECK]) {
         const row = healthFor(health, key);
         expect(row.health).toBe('ok');
         expect(row.outstanding).toBe(0);
