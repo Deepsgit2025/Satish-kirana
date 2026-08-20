@@ -450,12 +450,25 @@ This supersedes nothing. It is the reason the practice exists, written down befo
 
 ## Open items
 
-| Item | Owner | Blocks |
-|---|---|---|
-| Product CSV — several thousand SKUs, 6-digit HSN, optional `name_hi` | Client | R0 completion |
-| Shop opening date | Client | Whether a stopgap billing package is needed |
-| Legal Metrology packer registration number | Client | R7 |
-| Monthly-salary policy — does an absent day reduce pay? | Client | R8 |
-| Hardware purchase to spec | Client | R1 |
+| Item | Owner | Blocks | Status |
+|---|---|---|---|
+| Product CSV — several thousand SKUs, 6-digit HSN, optional `name_hi` | Client | R0 completion | **Not started.** Now the critical path — see below |
+| Shop opening date | Client | Whether a stopgap billing package is needed | Still unknown |
+| Legal Metrology packer registration number | Client | R7 | Open |
+| Monthly-salary policy — does an absent day reduce pay? | Client | R8 | Open |
+| Hardware purchase to spec | Client | R1 | Open |
 
 FSSAI licence: **held**, number to be entered in the Business Profile.
+
+### The catalogue is now the critical path, not the code
+
+`plan.md` Part 5 sized the product CSV at six to eight weeks of the client's staff and called it the longest pole in the project, on the assumption it started when the template shipped with step 5. **It has not started.**
+
+Step 7 is done, which leaves two steps in R0 — local backup and remote support. So the arithmetic has inverted: the software reaches the end of R0 with an empty catalogue, and the go-live date is set by data entry rather than by anything in this repository. Every day it does not start is a day on the end, and no amount of build speed recovers it.
+
+Two consequences worth acting on rather than noting:
+
+- **Ask for the file in progress, not the finished file.** The point of shipping the validator before any screen (D34) was that the client finds out about a four-digit HSN while he still remembers the row. That only works if somebody runs it on the first hundred rows. Thirty bad rows found at row 100 is a habit corrected; the same thirty found at row 3,000 is a re-key.
+- **He probably cannot run the validator himself.** `npm run catalogue:import -- file.csv --dry-run` needs Node, this repository and a reachable Postgres, and his staff are keying into a spreadsheet on a shop PC. `catalogue-import.md` now says what to do instead, but the practical loop is: he sends the file, it gets checked here, the report goes back.
+
+**The opening date is the other half of the same conversation.** It gates the stopgap billing decision, which has a lead time and is already argued out in `plan.md` Part 6 — option A, a commodity package for the first few months, with inventory live from R1 regardless. That decision is cheap to take early and expensive to take under an opening date.

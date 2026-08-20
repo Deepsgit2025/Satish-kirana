@@ -11,6 +11,14 @@ npm run catalogue:import -- products.csv             # load the good rows
 
 **Run the dry form as often as you like.** It reads the file, checks every row and prints what is wrong, and writes nothing at all — it is safe against the live shop database. Run it while you are still typing rather than at the end: an HSN code that is four digits long is a ten-second fix on the day you enter it and a long afternoon six weeks later.
 
+## Have it checked every week, from the first hundred rows
+
+**Do not wait until the file is finished.** The commands above need Node, this repository and a running database, which the machine you are typing on almost certainly does not have. That is fine — **send the file as it stands and ask for it to be checked.** A report comes back naming the line number, the column and what is wrong with it, exactly as it appears further down this page.
+
+Do it after the first hundred rows, and every week or so after that. The reason is the arithmetic rather than tidiness: a mistake being made consistently — four-digit HSN codes, 12% on everything, sale prices above MRP — is a habit, and a habit caught at row 100 costs an afternoon of re-typing while the same habit caught at row 3,000 costs weeks. Nobody can see that pattern from inside the spreadsheet; the checker sees it in one pass.
+
+Send whatever exists. A partial file is checked exactly the same way as a complete one.
+
 ---
 
 ## Columns
