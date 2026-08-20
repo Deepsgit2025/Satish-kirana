@@ -98,11 +98,40 @@ No UI. The client is keying several thousand SKUs into a spreadsheet now, and ne
 
 The first screen in the system, which is why it comes after i18n rather than before it.
 
-> Build the product master and the import UI in apps/office on top of the step 5 core: browse, search, create and edit a product, and run an import with its error report on screen. Add bulk edit for price, tax slab and category.
+> Build the product master and the import UI in apps/office on top of the step 5 core. **Three views over one catalogue**, not one screen with modes:
 >
-> Bulk tax reassignment takes an `effective_from` date and does not apply immediately — a future-dated `product_tax_assignments` row is the pending change, and the nightly job advances the cache on the day (`docs/DECISIONS.md` D27). When reassigning, offer keep-MRP (absorb the tax change) or recompute-MRP (pass it on).
+> - **List** — browse, search and filter: name, barcode, category, slab, status. How anybody finds a product.
+> - **Single product** — create and edit one product across every field. How a new line is added and a wrong figure is fixed.
+> - **Bulk grid** — select rows, set one field, apply to all. Price, tax slab and category. How a price revision or a rate change actually arrives: dozens of SKUs at once (`docs/modules.md`, Catalog).
+>
+> Plus the import UI: run a file and read its error report on screen.
+>
+> **All four paths validate through the step 5 core and write through the same history helpers.** `validateCatalogueRows` and the `RowIssue` it returns; `assignProductSlab` and `assignProductPrice`. A screen assembles the same row shape the CSV parser assembles and hands it to the same checks — `RowIssue.line` identifies a grid row or the form instead of a file line, and the reason is still a `catalogue.issue.*` key resolved in the reader's language (`docs/DECISIONS.md` D39). **No view owns a rule of its own** (D41).
+>
+> Two places the shared core has to stretch, named here so nobody writes a second one instead:
+>
+> - **An edit is not a create.** `existingBarcodes` rejects a barcode already on a product, which is every product being edited. The row's own product is excluded from that check — one lookup set built differently, not a second barcode rule.
+> - **A bulk change is a whole row.** The grid materialises the product's current values, applies the one changed field on top, and validates the result. That is what makes a bulk price rise get checked against MRP (D35) instead of sailing past a rule the file would have caught.
+>
+> **A bulk apply behaves like a file.** 200 selected, 8 fail: 192 apply and 8 report, against their rows, with every problem in a row listed rather than the first. The selection is no more abandoned over one product than a 2,000-row file is over one line. The rows that apply commit in one transaction.
+>
+> **And it leaves what the file leaves.** One `product_prices` and/or `product_tax_assignments` row per product, close-then-open through the helpers, same `changed_by`, `effective_from` from `databaseNow()` and never `new Date()` (CLAUDE.md, Working practices). The single field that differs is `reason`, which exists to differ. Six months on, nothing else about the two histories should say which screen the change came from.
+>
+> Bulk tax reassignment takes an `effective_from` date and does not apply immediately — a future-dated `product_tax_assignments` row is the pending change, and the nightly job advances the cache on the day (D27). When reassigning, offer keep-MRP (absorb the tax change) or recompute-MRP (pass it on). **The grid offers that same choice, not a simpler one.** A recomputed price is checked against MRP like any other, and a row that would cross the printed maximum reports as an issue and does not apply (D35). Future-dating the slab future-dates the price with it, on the same `effective_from` — otherwise the new price is charged for a month under the old rate.
 
-**Done when:** a product can be created, edited and bulk-reassigned from the screen, every string comes from `en.json` / `hi.json`, and a future-dated slab change applies on the right date and not before.
+**Done when:** a product can be created and edited from the single-product view; a bulk reassignment of 200 products leaves the same history rows, in the same shape, as importing those 200 as a file — asserted by a test that does both and compares, not by inspection; a bulk apply containing bad rows applies the good ones and reports the rest by row; every string comes from `en.json` / `hi.json`; and a future-dated slab change applies on the right date and not before.
+
+### Remaining scope, in order
+
+The headless core, the IPC contract (`docs/DECISIONS.md` D42) and a shell wired to it are done. Two things are settled about what is left, and the order matters.
+
+**Sign-in comes before the real screens, not after.** Every `product_prices` and `product_tax_assignments` row carries `changed_by`, and that column is the whole of the answer to "who changed this price". A placeholder — a hardcoded id, a nullable field the UI fills in later — would make every history row written before sign-in exists quietly wrong, in exactly the way the tax cache work was careful not to be. So the single-product and bulk-edit screens are built against a real signed-in employee from their first commit rather than against a value that has to be swapped underneath them.
+
+Minimal is enough for R0: look up the employee, establish who they are, and let the writes take `changed_by` from that. **The renderer never supplies it.** A screen that could name whoever it liked as the author of a change is not an audit trail, it is a text field.
+
+**Language stays on the English fallback until sign-in exists.** The renderer resolves through `createLanguageSession({})` today. The real answer is `employees.preferred_language`, then `app_settings.default_language` — and neither is reachable without knowing who is signed in. Adding a contract method for it now would mean a method with nothing real behind it, which is the speculative surface D42 argues against. It arrives with sign-in, which is the point at which there is something to ask.
+
+Then the three real screens on top: list with search and filter, single-product create and edit, and the bulk grid.
 
 ---
 
@@ -129,6 +158,18 @@ Auto-update is the sharpest case. The very first build installed in the shop has
 > **Version stamp** visible in the UI on every device, so "which version are you on" is answerable.
 
 **Done when:** an update offered mid-day installs at day-close and not before; a diagnostics bundle from a counter is enough to diagnose a sync failure without a phone call, and contains no card numbers, full phone numbers or passwords; and every device shows its version on screen.
+
+**Upgrading Electron is on a clock, and this step is what answers it.** The installed major leaves Electron's supported window roughly six months after it goes in — `docs/DECISIONS.md` D43 carries the date and the checking interval. Without auto-update working, every security upgrade after that is a visit to the shop with a build on a USB stick.
+
+### Installing on the shop's own hardware
+
+**`npm ci` needs the internet, or it needs `ELECTRON_CACHE`.** Electron does not ship its binary in the npm package; a postinstall step downloads a platform-specific one (~225 MB on Windows x64). On a machine that is offline, behind a proxy, or on the shop's own connection on a bad day, the install fails at that step and the error names a download rather than a missing setting.
+
+Either point `ELECTRON_CACHE` at a directory holding a pre-fetched binary, copied from a machine that has already installed it, or set `ELECTRON_MIRROR` at a local one. Worth doing before travelling to the shop rather than while standing in it: this is a five-minute problem with a laptop and a working connection, and an afternoon without.
+
+**Launching the app once is part of the install, not a check afterwards.** The binary is fetched lazily — it did not arrive during `npm install` on the development machine, it arrived on the first `require('electron')`. So a machine can complete its install cleanly, report success, and still have no Electron on it. The failure then surfaces the first time somebody starts the app, which may be the following morning, with the technician already gone and a shop expecting to open.
+
+So the install procedure for each counter and the office machine ends with **starting the application and seeing it render**, on a machine with the same network profile it will have in service — offline if the store server will be offline at install time, behind the shop's connection if that is what it will use. An installer that ran without errors is not evidence the app will start. Only starting it is.
 
 **End of R0.** The shop has no software it can use yet, but everything after this sits on it.
 

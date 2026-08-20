@@ -92,6 +92,12 @@ Violating any of these is a bug, even if the code works and tests pass.
 
 22. **Never delete or skip the stock ledger rebuild test.** It posts randomised movements, rebuilds `stock_on_hand` from `stock_ledger`, and asserts an exact match. It is the only guard against silent stock drift, which cannot be debugged retroactively.
 
+### Application shell
+
+23. **The renderer gets the contract and nothing else.** Every `BrowserWindow` sets `contextIsolation: true` and `nodeIntegration: false`, and the only thing a preload puts on `window` is the typed contract — the six `CatalogueApi` methods today, whatever a later contract declares. Never `ipcRenderer` itself, never `require`, never a database client, never a filesystem helper "just for this screen".
+
+    The rule is about the shortcut, not the setting. A renderer that can reach Node can reach Postgres, and a screen that can reach Postgres will eventually validate something for itself rather than pay for a round trip — which is a second copy of a rule that already exists, in the place it is hardest to test (`docs/DECISIONS.md` D41, D42). Widening the surface is never the fix for an awkward screen; adding a method to the contract is.
+
 ---
 
 ## Working practices

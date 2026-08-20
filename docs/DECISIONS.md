@@ -342,6 +342,112 @@ The same applies to CLAUDE.md's invariants for the same reason, and D31 already 
 
 ---
 
+## D41 — The product master is three views over one validation core
+
+There are two ways a shop edits a catalogue and they do not resemble each other.
+
+**One product at a time.** A price is wrong, an HSN is four digits, a short name prints badly on the receipt. Somebody finds that product and fixes that field.
+
+**Many products at once.** A supplier revises a price list, a rate change moves a category between slabs, an aisle's reorder levels were all set too low. Somebody wants a grid, a selection, one value, and an apply.
+
+**Both get built, because choosing between them is a bet we do not have to take.** The client is keying several thousand SKUs into a spreadsheet right now (D34), which says he thinks in grids; the two years after opening are mostly one product at a time. Pick either and the other workflow is done by hand — a price revision keyed two hundred times, or a single wrong MRP hunted through a grid built for bulk. That is not something a demo surfaces. It surfaces a year in, as a habit somebody has already built around the gap.
+
+So step 7 ships **list**, **single product** and **bulk grid**: find, fix one, fix many. The shape is the reference app's, the same one `schema.md` reads against throughout, and `modules.md` has carried bulk edit as its own module since the first pass — "price revisions hit dozens of SKUs at once". It is also the argument that file's report appendix already makes about reports: build the frame once, and everything after it is a column definition. Built as separate screens instead, they eat the budget and drift apart.
+
+**The condition attached to building all three is the actual decision.** A third view is worth having when it is a selection model and a column. It is not worth having when it is a third rule set — that is three implementations of "sale price may not exceed MRP" (D35), and two of them will be wrong inside a year, because a rule only ever gets fixed in the copy whose bug somebody hit. So every path validates through `validateCatalogueRows` and reports `RowIssue`, and every path writes through `assignProductSlab` and `assignProductPrice`. A row a screen assembled is checked by the code that checks a row the CSV parser assembled.
+
+**Bulk is where the shortcut is tempting and where it is worst.** One UPDATE across two hundred products is a line of SQL and it skips the history entirely. That does not just lose the audit trail. `products.tax_slab_id` is a cache (D27, D28), so those two hundred products land in `product_tax_cache_drift` the same night, and `refresh_product_tax_slab_cache()` sets every one of them back to the slab its untouched assignment still names. The bulk change reports success at 11am and is gone by morning, with nothing on screen having lied at the time. A shortcut here is not a trade against tidiness; it is a change that does not stick.
+
+**The audit trail is that same point from the other end.** Six months on the question is "why is this product at 18%?", and nobody asking it knows or cares whether the rate arrived in a file or a grid. If the two paths write different shapes, the answer depends on which screen someone happened to use — the one thing a history exists to make irrelevant. So a bulk change of two hundred leaves what importing two hundred leaves: one row per product per table, close-then-open, same `changed_by`, same `effective_from`. `reason` is the only field that differs, because saying why is the whole of its job.
+
+**What this settles for later steps.** Any screen that changes many rows at once — bulk reorder levels, a supplier price list, bulk category moves — is another view over this core, not another way into the tables. And when a bulk action does not fit the validator, the validator is the thing that changes.
+
+---
+
+## D42 — The IPC boundary is designed before the UI, not discovered through it
+
+Electron runs two JavaScript contexts. The main process holds the filesystem, the Postgres connection and the app's privileges; the renderer holds the DOM and nothing else. They share no memory, so **every call a screen makes into the catalogue core crosses a serialisation boundary**. There is no version of this where a component imports `applyBulkEdit` and calls it.
+
+So the boundary is designed first, before there is a screen to shape it. The order for the product master is: define the contract, agree the dependencies, wire an empty shell to the real functions, then build the screens.
+
+**What the alternative looks like, because it does not announce itself.** IPC is friction. Every call wants a channel, a serialisable request, a serialisable reply and a handler on the far side. Somebody with a screen to finish and a boundary nobody designed does not usually build all of that — they reach for whatever removes the friction. `nodeIntegration` switched on. A `pg` client imported in the renderer because the query was right there. A validation check re-run in the component because round-tripping it to ask felt wasteful. Each is locally reasonable, none is written down, and together they are an architecture.
+
+**The end state is D41's failure one layer up.** D41 says three views are worth building *provided* they share one validation core, because the alternative is three copies of "sale price may not exceed MRP" (D35) and only the copy somebody hits the bug in ever gets fixed. A renderer that validates for itself to save an IPC hop is a fourth copy, sitting where it is hardest to test: behind a screen instead of in front of a `Queryable`. Step 7 spent its entire design budget making the grid and the importer inseparable. Letting them come apart at the UI boundary instead would spend it twice for nothing.
+
+**Where the two halves live, and why that split and not another.**
+
+- **Contract types in `packages/shared`.** It is already the one package both Electron apps and the server import, which makes it the only place a request shape can be written once and be the same shape on both ends of the wire. A channel whose request type is declared on each side separately is a channel that drifts, and it drifts silently — both sides compile.
+- **Implementations in `server/`, behind `Queryable`.** They take a database session and return plain data, which is what they already do. `searchProducts` and `applyBulkEdit` need no change at all to serve IPC; they need a handler in front of them. Nothing moves to accommodate the boundary, which is the sign the boundary is in the right place.
+- **`packages/shared` must never carry a `pg` dependency.** It has no runtime dependencies today and is bundled into the counter app — a till with a SQLite cache and no Postgres client — and into the renderer. The reason is not bundle size. A `pg` import in shared would put a database driver inside a browser context, which is the exact shortcut this entry exists to close off; the dependency graph is what makes taking it impossible rather than merely discouraged.
+
+**What makes this real rather than aspirational** is that the shell gets wired to the contract while the screens are still empty — real functions, placeholder output. A boundary that carries a list query and a bulk apply before anyone has styled anything is a boundary that was designed. One discovered while a screen is half built is a boundary shaped by whatever was expedient that afternoon, and it will still be there in five years.
+
+---
+
+## D43 — Electron support expires on a schedule, so upgrading it is a standing obligation
+
+**Electron 43.4.1 was installed on 20 August 2026. It leaves Electron's supported window around February 2027.**
+
+Electron ships a major roughly every eight weeks and backports security fixes to the **latest three majors only**. Forty-four stable majors have been published; when 43 went in, the supported set was 41, 42 and 43. Three majors at eight weeks is about six months, so the version this shop runs today stops receiving security fixes around February 2027, whatever anybody does. That is not a defect and it is not avoidable by choosing a different version — a newer one buys weeks, not years.
+
+**Which makes this the one dependency whose upgrade cannot wait for a reason to upgrade.** Everything else in this project is replaced when something needs fixing. Electron is replaced because the calendar says so, and the calendar is the only thing that will say so — an unsupported Electron looks and behaves exactly like a supported one. It runs a full Chromium, which is the largest attack surface in the building and the one most likely to have a published exploit against a version six months old.
+
+**The obligation, stated so it can be met:**
+
+- **Check the supported window every three months**, or whenever `electron` is touched for any other reason. `npm view electron versions` tells you the current major; three below it is the edge.
+- **Upgrade before the installed major falls out of the set**, not after. An upgrade done early is a routine version bump; done late it is a version bump plus an incident.
+- **Record the new date here**, as an entry that supersedes this one. This entry is dated deliberately: an undated "keep Electron up to date" is a note nobody can tell is overdue, which is the same failure D30 built the reconciliation health panel to prevent — a check that has not run must look as wrong as a check that failed.
+
+**This is what makes step 9 load-bearing rather than convenient.** Auto-update is described there as one of four things that make supporting this system from another city possible, and it is the only mechanism by which a security upgrade reaches the shop at all. Without it an Electron upgrade is a physical visit to the shop with a build on a USB stick — for two counters and an office machine, on a schedule set by a release calendar nobody in the shop reads. That is not a support model that survives a year.
+
+Step 9 already argues that the *first* build installed has to know how to update itself, because otherwise there is no remote path to the second. This entry is why that has a deadline attached: the second build is not hypothetical and it is not driven by a feature request. It is due in roughly six months, and it will be due again six months after that.
+
+**A consequence worth stating plainly.** If the shop goes live before step 9's auto-update works, the clock in the first paragraph is still running and there is no way to answer it remotely. Auto-update is therefore not the last thing in R0 that can slip; it is the thing whose slipping quietly converts every future security fix into a site visit.
+
+---
+
+## D44 — Sign-in identifies, it does not authenticate — and what makes that stop being enough
+
+**Signing in to the office app is choosing your name from a list.** No password, no PIN. `employees.pin_hash` exists in `001_foundation.sql` and nothing writes it.
+
+So `changed_by` on a `product_prices` or `product_tax_assignments` row records **who said they were at the machine**, not a verified identity. Anyone with physical access to the office desk can select any active employee and make changes under their name.
+
+**This is correct and sufficient for R0**, and the reason is specific rather than a shrug. There is one office machine, at one desk, in a shop the owner is in. The realistic alternative is not a stronger credential — it is no attribution at all, or a shared login everybody uses, which is the same thing with more steps. Recording a claim is a large improvement on recording nothing: it makes a wrong change traceable to a person who was plausibly there, on a day, and that is enough to have the conversation. A four-digit PIN nobody can be bothered to type is worth less than a name people select honestly.
+
+**What it is not is a control against a determined insider**, and nothing downstream should be built as though it were. In particular: do not add a report, a permission, or a policy whose correctness depends on `changed_by` being unforgeable, without fixing this first.
+
+**The trigger for revisiting, stated so it is recognisable when it arrives.** Real authentication — PIN at minimum — becomes required at whichever of these happens first:
+
+- **A counter allows sign-in.** Cashiers are a different case entirely: more people, higher turnover, cash involved, and D25 already separates `bill.create` from `price.edit` on the assumption that who is signed in is known. A till where anybody can become anybody makes that separation decorative.
+- **A second office workstation exists.** One desk in one room is why "whoever is nearest" is a reasonable guess about who is signed in. Two machines in two places is not one room, and the assumption stops holding the day the second one is installed rather than gradually.
+
+Either of those is the point at which this entry is superseded, not the point at which somebody starts thinking about it. The schema is already ready — `pin_hash` is there, unused, waiting for whoever decides the scheme.
+
+**Why the gap is worth writing down rather than just fixing later.** The column is called `changed_by` and reads like proof. Everything else this project records is either enforced or reconciled: the tax cache has a drift view, the stock cache has a rebuild test, the ledgers are append-only in the database rather than by convention. This one field is a claim, and a reader six months from now has no way to tell that from the schema. Now they do.
+
+---
+
+## D45 — Launch it and use it, every stage that touches a database or an IPC boundary
+
+**Step 7 shipped three bugs that a green build could not see. All three were found by starting the app and clicking something.**
+
+- **The preload threw before it exposed anything.** Importing a value from the `@ssbazar/shared` barrel dragged in the font helpers; bundled to CommonJS, `new URL(…, import.meta.url)` became `new URL(…, '' + {}.url)`, which throws. `contextBridge.exposeInMainWorld` never ran, so `window.catalogue` did not exist and every screen would have failed with nothing in the console to explain it. Typecheck: clean. Build: clean, with a warning nobody would read twice.
+- **Translation keys were destroyed in transit.** `attempt()` handed back the `TranslatableError` itself as the failure. It satisfies `TranslatableMessage` structurally, so it compiled, and it works perfectly in process — then crosses IPC as `{}`, because structured clone keeps only an Error's name, message and stack. A Hindi screen would have had nothing to say. The JSON round-trip test could not catch it: `JSON.stringify` *does* keep those properties, so JSON does not model structured clone.
+- **Tests that only passed against an empty table.** A smoke run left one `hsn_codes` row behind and two step-5 tests went red. Seeding the database to look like a shop that had already imported a catalogue took ten tests down, across four files. Every one of them would have passed forever until the client imported his spreadsheet — which is the day they would all have broken at once, for a reason having nothing to do with the code under test (CLAUDE.md, Working practices).
+
+**What the three have in common is that reading the code was never going to find them.** Each lives in a gap between two things that are each correct: a bundler and a module system, a type and a serialiser, a test and the database it happens to run against. Static checking sees one side. The gap only exists at runtime.
+
+**So the discipline is a rule, not a habit.** Any stage that touches a real database or crosses an IPC boundary ends by **launching the built application and using the thing that changed** — not by running the test suite again, and not by reading the diff once more. Where the change writes, that means writing something real and looking at what landed. Where it reads, it means reading something that is actually there.
+
+Two specific consequences worth stating, because both cost time here:
+
+- **A build that succeeds is not a build that starts.** Electron fetches its binary lazily, an ESM entry can resolve differently from the module it imports, and a bundler will happily externalise `node:path` into a browser context. Build-order step 9 makes *starting* the app part of installing it for exactly this reason.
+- **Clean up after a smoke run, and know what it left.** The row that broke the tests was one `hsn_codes` entry nobody thought about. That is a small cost for the finding, but a smoke run against a shared database is a write, and writes want the same care as any other.
+
+This supersedes nothing. It is the reason the practice exists, written down before the next stage is tempted to skip it because the tests are green.
+
+---
+
 ## Open items
 
 | Item | Owner | Blocks |
