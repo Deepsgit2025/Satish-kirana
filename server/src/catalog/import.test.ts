@@ -136,23 +136,39 @@ describe('importCatalogue', () => {
       expect(report).toMatchObject({ totalRows: 5, imported: 2, rejected: 3 });
       expect(report.issues.map((issue) => issue.line)).toEqual([3, 5, 6]);
 
-      // The two good rows are really there - the bad ones did not take them down.
-      await expect(scalarInt(db, `SELECT count(*)::int AS n FROM products`)).resolves.toBe(2);
+      // The two good rows are really there - the bad ones did not take them
+      // down. Counted by barcode rather than by `count(*)`: this database has
+      // the shop's own catalogue in it the moment anybody imports one
+      // (CLAUDE.md, Working practices).
+      await expect(
+        scalarInt(
+          db,
+          `SELECT count(*)::int AS n FROM product_barcodes
+            WHERE barcode IN ('8901000000001', '8901000000002')`,
+        ),
+      ).resolves.toBe(2);
     });
   });
 
   it('creates unknown categories rather than rejecting the row', async () => {
     await withRollback(async (db) => {
-      const report = await importCatalogue(db, file(RICE, SOAP));
+      // An aisle name no real catalogue would hold, so "was it created" has one
+      // answer whatever else is in this database. `Grocery` is exactly what the
+      // shop's own catalogue calls an aisle, and asserting on it would make
+      // this test pass only until somebody imports one.
+      const aisle = 'Import Test Aisle';
+      const row = `8901000000021,Aisle probe,,PROBE,100630,5,100,90,80,Kg,${aisle},`;
 
-      expect(report.categoriesCreated).toEqual(['Grocery', 'Personal Care']);
+      const report = await importCatalogue(db, file(row));
 
-      const rice = await productByBarcode(db, '8901000000001');
-      expect(rice.category_id).not.toBeNull();
+      expect(report.categoriesCreated).toEqual([aisle]);
+
+      const probe = await productByBarcode(db, '8901000000021');
+      expect(probe.category_id).not.toBeNull();
 
       // Materialised path maintained, same shape the office screen uses.
       const path = firstRow(
-        (await db.query(`SELECT path FROM categories WHERE name = 'Grocery'`)).rows,
+        (await db.query(`SELECT path FROM categories WHERE name = $1`, [aisle])).rows,
       );
       expect(readText(path, 'path')).toMatch(/^\/\d+\/$/);
     });
@@ -160,12 +176,19 @@ describe('importCatalogue', () => {
 
   it('reuses a category that already exists, whatever its case', async () => {
     await withRollback(async (db) => {
-      await db.query(`INSERT INTO categories (name) VALUES ('GROCERY')`);
+      const aisle = 'Import Test Aisle';
+      await db.query(`INSERT INTO categories (name) VALUES ($1)`, [aisle.toUpperCase()]);
 
-      const report = await importCatalogue(db, file(RICE));
+      const row = `8901000000022,Aisle probe,,PROBE,100630,5,100,90,80,Kg,${aisle},`;
+      const report = await importCatalogue(db, file(row));
 
       expect(report.categoriesCreated).toEqual([]);
-      await expect(scalarInt(db, `SELECT count(*)::int AS n FROM categories`)).resolves.toBe(1);
+      // One of it, not two differing only in case.
+      await expect(
+        scalarInt(db, `SELECT count(*)::int AS n FROM categories WHERE lower(name) = lower($1)`, [
+          aisle,
+        ]),
+      ).resolves.toBe(1);
     });
   });
 
@@ -176,8 +199,22 @@ describe('importCatalogue', () => {
         file(RICE, SOAP, '8901000000005,More rice,,RICE2,100630,5,300,290,250,Kg,Grocery,'),
       );
 
-      expect([...report.hsnCodesCreated].sort()).toEqual(['100630', '340111']);
-      await expect(scalarInt(db, `SELECT count(*)::int AS n FROM hsn_codes`)).resolves.toBe(2);
+      // Three rows, two distinct codes, and 100630 appears on two of them.
+      // Whichever were not already in the system were added once each - the
+      // report never repeats a code.
+      expect(new Set(report.hsnCodesCreated).size).toBe(report.hsnCodesCreated.length);
+
+      // And both are there afterwards, however they got there. Asserted by
+      // code rather than by counting the table: the moment anybody imports a
+      // real catalogue into this database, `count(*)` stops being 2 and the
+      // test fails for a reason that has nothing to do with the importer
+      // (CLAUDE.md, Working practices).
+      await expect(
+        scalarInt(
+          db,
+          `SELECT count(*)::int AS n FROM hsn_codes WHERE hsn_code IN ('100630', '340111')`,
+        ),
+      ).resolves.toBe(2);
     });
   });
 
@@ -209,15 +246,24 @@ describe('importCatalogue', () => {
 
   it('writes nothing on a dry run', async () => {
     await withRollback(async (db) => {
+      // Counted before and after rather than asserted to be zero. This is the
+      // one command in the system pointed deliberately at the *live* database
+      // (D34), so the table it writes nothing to is a table with the shop's
+      // real catalogue in it - and a test that expects it empty passes only
+      // until the client uses the feature (CLAUDE.md, Working practices).
+      const counts = async (): Promise<Record<string, number>> => ({
+        products: await scalarInt(db, `SELECT count(*)::int AS n FROM products`),
+        categories: await scalarInt(db, `SELECT count(*)::int AS n FROM categories`),
+        hsnCodes: await scalarInt(db, `SELECT count(*)::int AS n FROM hsn_codes`),
+        prices: await scalarInt(db, `SELECT count(*)::int AS n FROM product_prices`),
+        assignments: await scalarInt(db, `SELECT count(*)::int AS n FROM product_tax_assignments`),
+      });
+
+      const before = await counts();
       const report = await importCatalogue(db, file(RICE, SOAP), { dryRun: true });
 
       expect(report).toMatchObject({ dryRun: true, totalRows: 2, imported: 0, rejected: 0 });
-
-      // This is what the client runs against his spreadsheet, so it has to be
-      // safe to point at the live database.
-      await expect(scalarInt(db, `SELECT count(*)::int AS n FROM products`)).resolves.toBe(0);
-      await expect(scalarInt(db, `SELECT count(*)::int AS n FROM categories`)).resolves.toBe(0);
-      await expect(scalarInt(db, `SELECT count(*)::int AS n FROM hsn_codes`)).resolves.toBe(0);
+      expect(await counts()).toEqual(before);
     });
   });
 

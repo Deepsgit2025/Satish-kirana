@@ -4,8 +4,10 @@ import { readCsvTable } from './csv.js';
 import {
   type CatalogueLookups,
   CatalogueFileError,
+  catalogueRow,
   rateKey,
   validateCatalogueRows,
+  validateSourceRows,
 } from './import-validation.js';
 
 /**
@@ -33,7 +35,8 @@ const lookups: CatalogueLookups = {
     [rateKey(5), 11],
     [rateKey(18), 12],
   ]),
-  existingBarcodes: new Set(['8909999999999']),
+  /** Already worn by product 77. */
+  barcodeOwners: new Map([['8909999999999', 77]]),
 };
 
 function validate(...rows: string[]) {
@@ -238,5 +241,89 @@ describe('validateCatalogueRows', () => {
       expect(issues).toEqual([]);
       expect(valid[0]).toMatchObject({ nameHi: null, categoryName: null, reorderLevel: '0' });
     });
+  });
+});
+
+/**
+ * The same rule set, reached from a screen instead of a file.
+ *
+ * These cases exist to prove the claim D41 rests on: the product master does
+ * not get its own validator. If one of these ever needs a rule the file path
+ * does not have, the two have started to drift and the cheap three-view screen
+ * has quietly become three screens.
+ */
+describe('validateSourceRows', () => {
+  const FIELDS = {
+    barcode: '8901234567890',
+    name: 'Basmati Rice 5kg',
+    name_hi: 'चावल',
+    short_name: 'RICE 5KG',
+    hsn_code: '100630',
+    tax_rate: '5',
+    mrp: '520',
+    sale_price: '495',
+    purchase_price: '410',
+    unit: 'Kg',
+    category: 'Grocery',
+    reorder_level: '10',
+  };
+
+  function check(...rows: ReturnType<typeof catalogueRow>[]) {
+    return validateSourceRows(rows, 12, lookups);
+  }
+
+  it('applies the file rules to a row assembled from a form', () => {
+    const { valid, issues } = check(catalogueRow(1, { ...FIELDS, hsn_code: '1006' }));
+
+    expect(valid).toEqual([]);
+    expect(issues.map((issue) => issue.reasonKey)).toEqual(['catalogue.issue.hsn_not_six_digits']);
+  });
+
+  it('lets a product keep its own barcode through an edit', () => {
+    // 8909999999999 belongs to product 77. Editing product 77 and leaving the
+    // barcode alone is not a collision; treating it as one would fail every
+    // edit on the one field the operator did not touch.
+    const fields = { ...FIELDS, barcode: '8909999999999' };
+
+    expect(check(catalogueRow(1, fields, 77)).issues).toEqual([]);
+    expect(check(catalogueRow(1, fields, 78)).issues.map((issue) => issue.reasonKey)).toEqual([
+      'catalogue.issue.barcode_in_system',
+    ]);
+    // And a create still cannot take it.
+    expect(check(catalogueRow(1, fields)).issues.map((issue) => issue.reasonKey)).toEqual([
+      'catalogue.issue.barcode_in_system',
+    ]);
+  });
+
+  it('reports a bulk price rise against MRP, row by row', () => {
+    // The case the bulk grid exists for and the one a shortcut would miss:
+    // one new sale price applied to rows whose MRPs differ. Only the rows it
+    // would push above the printed maximum fail (docs/DECISIONS.md D35).
+    const { valid, issues } = check(
+      catalogueRow(1, { ...FIELDS, barcode: '891', mrp: '600', sale_price: '550' }, 1),
+      catalogueRow(2, { ...FIELDS, barcode: '892', mrp: '500', sale_price: '550' }, 2),
+      catalogueRow(3, { ...FIELDS, barcode: '893', mrp: '550', sale_price: '550' }, 3),
+    );
+
+    expect(valid.map((row) => row.line)).toEqual([1, 3]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ line: 2, reasonKey: 'catalogue.issue.sale_price_above_mrp' });
+  });
+
+  it('carries the product id onto the validated row', () => {
+    const { valid } = check(
+      catalogueRow(1, FIELDS, 42),
+      catalogueRow(2, { ...FIELDS, barcode: '9' }),
+    );
+
+    expect(valid.map((row) => row.productId)).toEqual([42, null]);
+  });
+
+  it('cannot trip the field-count check, which is a CSV fault', () => {
+    // A form has no unquoted commas to get wrong. catalogueRow fills every
+    // column so this can never fire on a screen row.
+    const { issues } = check(catalogueRow(1, { barcode: '890', name: 'X' }));
+
+    expect(issues.map((issue) => issue.reasonKey)).not.toContain('catalogue.issue.field_count');
   });
 });

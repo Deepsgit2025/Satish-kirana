@@ -1,4 +1,14 @@
-import { type MessageParams, TranslatableError, type TranslationKey } from '@ssbazar/shared';
+import {
+  CATALOGUE_COLUMNS,
+  type CatalogueValues,
+  type IssueKey,
+  type MessageParams,
+  OPTIONAL_COLUMNS,
+  REQUIRED_COLUMNS,
+  type RowIssue,
+  TranslatableError,
+  type TranslationKey,
+} from '@ssbazar/shared';
 
 import type { CsvRow, CsvTable } from './csv.js';
 
@@ -31,22 +41,42 @@ import type { CsvRow, CsvTable } from './csv.js';
  * do its job. Rendering happens once, in the CLI, in his language.
  */
 
-/** The `catalogue.issue.*` half of the catalogue, and nothing else. */
-export type IssueKey = Extract<TranslationKey, `catalogue.issue.${string}`>;
+/**
+ * `RowIssue`, `IssueKey`, `CatalogueValues` and the column lists are defined in
+ * `@ssbazar/shared` rather than here, and re-exported so this file stays the
+ * one place the validator's callers import from.
+ *
+ * They are there because they cross the IPC boundary: the product master
+ * renders exactly these issues, against exactly these columns, in a different
+ * JavaScript context from the one that produced them (docs/DECISIONS.md D42).
+ * Declaring them on each side would let the two drift while both still
+ * compiled.
+ */
+export type { CatalogueValues, IssueKey, RowIssue };
 
-export interface RowIssue {
-  /** Physical line in the file - what the spreadsheet's row gutter shows. */
-  readonly line: number;
-  readonly column: string;
-  readonly value: string;
-  /** Why the row was left out, as a key - never as English. */
-  readonly reasonKey: IssueKey;
-  readonly reasonParams: MessageParams;
+/**
+ * A row on its way in, from wherever.
+ *
+ * The CSV parser produces exactly this shape already, which is what lets the
+ * product master hand the same checks a row assembled from a form or a grid
+ * cell (docs/DECISIONS.md D41). Values are strings on both routes on purpose:
+ * a form field and a spreadsheet cell both hold text, and validating the text
+ * is what makes "must be exactly 6 digits" mean the same thing in both places.
+ */
+export interface SourceRow extends CsvRow {
+  /**
+   * The product this row edits, or null/absent when it creates one. Only the
+   * barcode check reads it - a product's own barcode is not "already in the
+   * system" as far as editing that product goes.
+   */
+  readonly productId?: number | null;
 }
 
 /** A row that passed every check, with lookups already resolved to ids. */
 export interface ValidCatalogueRow {
   readonly line: number;
+  /** Null on a create, which is every row of an import. */
+  readonly productId: number | null;
   readonly barcode: string;
   readonly name: string;
   readonly nameHi: string | null;
@@ -67,7 +97,16 @@ export interface CatalogueLookups {
   readonly unitIdByName: ReadonlyMap<string, number>;
   /** Total GST rate in hundredths - 5% is 500 - to the id of the slab in force. */
   readonly slabIdByRate: ReadonlyMap<number, number>;
-  readonly existingBarcodes: ReadonlySet<string>;
+  /**
+   * Every barcode in the system, to the product wearing it.
+   *
+   * A set would answer "is this taken", which is the only question an import
+   * asks, and the wrong question everywhere else: on an edit screen every
+   * product's own barcode is taken, by itself. Carrying the owner is what lets
+   * one rule serve a create, an edit and two hundred rows of a bulk grid
+   * without any of them getting a private version of it (D41).
+   */
+  readonly barcodeOwners: ReadonlyMap<string, number>;
 }
 
 export interface ValidationResult {
@@ -85,18 +124,7 @@ export class CatalogueFileError extends TranslatableError {
   }
 }
 
-export const REQUIRED_COLUMNS = [
-  'barcode',
-  'name',
-  'short_name',
-  'hsn_code',
-  'tax_rate',
-  'mrp',
-  'sale_price',
-  'unit',
-] as const;
-
-export const OPTIONAL_COLUMNS = ['name_hi', 'purchase_price', 'category', 'reorder_level'] as const;
+export { CATALOGUE_COLUMNS, OPTIONAL_COLUMNS, REQUIRED_COLUMNS };
 
 /** NUMERIC(12,2): ten digits before the point, two after. */
 const MONEY = /^\d{1,10}(\.\d{1,2})?$/;
@@ -121,14 +149,19 @@ function isPositive(decimal: string): boolean {
 class RowChecker {
   readonly issues: RowIssue[] = [];
 
-  private readonly row: CsvRow;
+  private readonly row: SourceRow;
 
-  constructor(row: CsvRow) {
+  constructor(row: SourceRow) {
     this.row = row;
   }
 
   get line(): number {
     return this.row.line;
+  }
+
+  /** The product being edited, or null when this row creates one. */
+  get productId(): number | null {
+    return this.row.productId ?? null;
   }
 
   get ok(): boolean {
@@ -195,7 +228,11 @@ function checkBarcode(
   // chaining line 2 -> line 5 -> line 9.
   firstSeenAt.set(barcode, checker.line);
 
-  if (lookups.existingBarcodes.has(barcode)) {
+  // Taken by somebody else. A product keeping its own barcode through an edit
+  // is not a collision, and rejecting it would make every edit fail on the one
+  // field the operator did not touch.
+  const owner = lookups.barcodeOwners.get(barcode);
+  if (owner !== undefined && owner !== checker.productId) {
     checker.fail('barcode', 'catalogue.issue.barcode_in_system');
     return null;
   }
@@ -224,7 +261,7 @@ function checkMoney(
 }
 
 function checkRow(
-  row: CsvRow,
+  row: SourceRow,
   columnCount: number,
   lookups: CatalogueLookups,
   firstSeenAt: Map<string, number>,
@@ -316,6 +353,7 @@ function checkRow(
   return {
     valid: {
       line: row.line,
+      productId: row.productId ?? null,
       barcode,
       name,
       nameHi: nameHiRaw.length === 0 ? null : nameHiRaw,
@@ -334,25 +372,63 @@ function checkRow(
 }
 
 /**
- * Checks every row. Throws only when the file itself is unusable - a missing
- * column heading - and otherwise returns the good rows and the reasons the
- * others were left out.
+ * Builds a row for the validator out of column values, for the routes that have
+ * no file behind them - the create form, the edit form, a line of the bulk
+ * grid.
+ *
+ * `line` is whatever number the person is looking at: the grid row, or 1 for a
+ * form. `fieldCount` is set to match, because a form cannot have the wrong
+ * number of fields - that check exists for an unquoted comma in a CSV, and a
+ * screen row must not be able to trip it.
+ */
+export function catalogueRow(
+  line: number,
+  values: Readonly<Partial<CatalogueValues>>,
+  productId: number | null = null,
+): SourceRow {
+  const map = new Map<string, string>();
+  const supplied: Readonly<Partial<Record<string, string>>> = values;
+  for (const column of CATALOGUE_COLUMNS) map.set(column, supplied[column] ?? '');
+
+  return { line, values: map, fieldCount: CATALOGUE_COLUMNS.length, productId };
+}
+
+/**
+ * Checks a set of rows, whatever assembled them.
+ *
+ * This is the core of D41: the import, the create form, the edit form and the
+ * bulk grid all arrive here, so there is one implementation of every rule and
+ * one shape of complaint about it. A rule fixed here is fixed for all four,
+ * which is the property that makes building three views cheaper than building
+ * one and bolting the others on.
+ */
+export function validateSourceRows(
+  rows: readonly SourceRow[],
+  columnCount: number,
+  lookups: CatalogueLookups,
+): ValidationResult {
+  const valid: ValidCatalogueRow[] = [];
+  const issues: RowIssue[] = [];
+  const firstSeenAt = new Map<string, number>();
+
+  for (const row of rows) {
+    const result = checkRow(row, columnCount, lookups, firstSeenAt);
+    if (result.valid === undefined) issues.push(...result.issues);
+    else valid.push(result.valid);
+  }
+
+  return { valid, issues };
+}
+
+/**
+ * Checks every row of a parsed file. Throws only when the file itself is
+ * unusable - a missing column heading - and otherwise returns the good rows and
+ * the reasons the others were left out.
  */
 export function validateCatalogueRows(
   table: CsvTable,
   lookups: CatalogueLookups,
 ): ValidationResult {
   checkHeader(table);
-
-  const valid: ValidCatalogueRow[] = [];
-  const issues: RowIssue[] = [];
-  const firstSeenAt = new Map<string, number>();
-
-  for (const row of table.rows) {
-    const result = checkRow(row, table.columns.length, lookups, firstSeenAt);
-    if (result.valid === undefined) issues.push(...result.issues);
-    else valid.push(result.valid);
-  }
-
-  return { valid, issues };
+  return validateSourceRows(table.rows, table.columns.length, lookups);
 }
