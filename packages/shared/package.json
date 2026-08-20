@@ -10,6 +10,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./catalogue": {
+      "types": "./dist/catalogue/contract.d.ts",
+      "default": "./dist/catalogue/contract.js"
+    },
+    "./i18n": {
+      "types": "./dist/i18n/browser.d.ts",
+      "default": "./dist/i18n/browser.js"
     }
   },
   "files": [

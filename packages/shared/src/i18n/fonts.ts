@@ -1,5 +1,5 @@
 /**
- * Where the Devanagari font is, asked once.
+ * The Devanagari font, as plain data.
  *
  * Three things need the same file and must not each decide for themselves: the
  * receipt raster renderer (invariant 21), and the two Electron apps' stylesheets.
@@ -8,11 +8,9 @@
  * tell which one is wrong.
  *
  * `assets/fonts/README.md` covers what the file is and why it is committed
- * rather than fetched. This module is only the address.
+ * rather than fetched. The filesystem path lives in `font-files.ts`, which needs
+ * Node; everything here is safe to import from a browser context.
  */
-
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import type { Language } from './language.js';
 
@@ -28,29 +26,6 @@ export const DEVANAGARI_FACES: readonly FontFace[] = [
   { family: DEVANAGARI_FAMILY, weight: 400, file: 'NotoSansDevanagari-Regular.ttf' },
   { family: DEVANAGARI_FAMILY, weight: 700, file: 'NotoSansDevanagari-Bold.ttf' },
 ];
-
-/**
- * Overridden by `SSBAZAR_FONT_DIR`.
- *
- * The default resolves relative to this module, which is correct running from
- * `src` under tsx and from `dist` after a build - both sit the same distance
- * below the repository root. It is *not* correct inside a packaged Electron
- * app, where the asset lands in the platform's resources directory. That is
- * what the environment variable is for, and the packaging step is expected to
- * set it rather than this file growing a list of platform layouts.
- */
-const DEFAULT_FONT_DIR = new URL('../../../../assets/fonts/', import.meta.url);
-
-export function fontDirectory(): string {
-  const override = process.env.SSBAZAR_FONT_DIR;
-  if (override !== undefined && override.trim().length > 0) return override.trim();
-  return fileURLToPath(DEFAULT_FONT_DIR);
-}
-
-/** Absolute path to one face, for a renderer that loads font bytes. */
-export function fontPath(face: FontFace): string {
-  return join(fontDirectory(), face.file);
-}
 
 export function devanagariFont(weight: 400 | 700 = 400): FontFace {
   const face = DEVANAGARI_FACES.find((candidate) => candidate.weight === weight);

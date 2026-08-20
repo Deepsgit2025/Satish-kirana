@@ -1,21 +1,25 @@
 /**
- * The i18n framework (build-order step 6).
+ * The i18n surface a browser context may import.
  *
- * One catalogue for the whole monorepo rather than one per app. The counter,
- * the office and the server CLIs share a vocabulary - a product, a barcode, a
- * tax slab, a rejected row - and three copies of it drift into three different
- * Hindi words for "barcode" within a month. Ownership is handled by namespace
- * (`cli.*`, `error.*`, `catalogue.*`) instead.
+ * Everything here is plain data and pure functions. What it deliberately leaves
+ * out is `font-files.ts` - the only part of i18n that reaches for `node:path`,
+ * and enough on its own to break a renderer or preload bundle at load
+ * (docs/DECISIONS.md D42).
+ *
+ * Reached as `@ssbazar/shared/i18n`. The full barrel `@ssbazar/shared` still
+ * exports everything and is what the server and the CLIs use; a screen imports
+ * from here instead, and the packaging is what makes "instead" enforceable
+ * rather than remembered.
  */
 
 export {
+  CATALOGUES,
+  collectKeys,
+  lookupMessage,
   type Message,
   type MessageTree,
   type PluralMessage,
   type TranslationKey,
-  collectKeys,
-  CATALOGUES,
-  lookupMessage,
 } from './catalogue.js';
 export {
   DEVANAGARI_FACES,
@@ -24,9 +28,6 @@ export {
   type FontFace,
   fontStack,
 } from './fonts.js';
-// Node-only: the filesystem path to a font file. Never import this from a
-// renderer or a preload — it carries node:path (docs/DECISIONS.md D42).
-export { fontDirectory, fontPath } from './font-files.js';
 export { isTranslatableError, TranslatableError, type TranslatableMessage } from './errors.js';
 export {
   FALLBACK_LANGUAGE,

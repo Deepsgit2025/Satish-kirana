@@ -3,14 +3,12 @@
     "en": "English",
     "hi": "Hindi"
   },
-
   "cli": {
     "common": {
       "failed": "failed: {detail}",
       "connection": "Connection settings are read from PGHOST, PGPORT, PGDATABASE, PGUSER and PGPASSWORD — see .env.example.",
       "option_help": "Show this message."
     },
-
     "migrate": {
       "usage": "Usage: npm run db:migrate [-- --dry-run]",
       "option_dry_run": "List pending migrations without applying them.",
@@ -31,7 +29,6 @@
       },
       "unreachable": "could not reach {target} — is Postgres running?"
     },
-
     "reconcile": {
       "usage": "Usage: npm run db:reconcile",
       "description": "Runs every check in reconciliation_checks and records the outcome. Exits 1 if any check reports drift or fails.",
@@ -56,7 +53,6 @@
         "disabled": "disabled"
       }
     },
-
     "catalogue": {
       "usage": "Usage: npm run catalogue:import -- <file.csv> [--dry-run]",
       "option_dry_run": "Validate and report without writing anything.",
@@ -83,7 +79,6 @@
       }
     }
   },
-
   "error": {
     "tax": {
       "bill": {
@@ -105,19 +100,21 @@
         "mode_invalid": "Round-off mode \"{mode}\" is not one of nearest, up, down."
       }
     },
-
     "csv": {
       "empty_file": "The file is empty.",
       "duplicate_heading": "Duplicate column heading: {columns}.",
       "unterminated_quote": "Unterminated quoted field starting on line {line}. A quote was opened and never closed, so the rest of the file cannot be read."
     },
-
     "catalogue": {
       "missing_columns": "The file is missing required column(s): {missing}. Expected headings: {expected}.",
-      "ambiguous_slab": "Two tax slabs are in force at the same rate ({slab}). Close one before importing."
+      "ambiguous_slab": "Two tax slabs are in force at the same rate ({slab}). Close one before importing.",
+      "no_such_product": "That product is not in the catalogue. It may have been removed on another machine — refresh the list and try again.",
+      "invalid_date": "{value} is not a date the system can read.",
+      "request_failed": "The catalogue could not complete that. Nothing was changed. If it keeps happening, send diagnostics.",
+      "not_signed_in": "Nobody is signed in, so this change has no author and was not made. Sign in and try again.",
+      "unknown_employee": "That employee is not on the active list. They may have left, or been marked inactive on another machine."
     }
   },
-
   "catalogue": {
     "issue": {
       "required": "required, but blank",
@@ -132,7 +129,98 @@
       "money_not_positive": "must be greater than zero",
       "sale_price_above_mrp": "higher than mrp ({mrp}) — MRP is a legal maximum",
       "unit_unknown": "not a unit in the units master",
-      "quantity_invalid": "not a quantity (digits, optionally up to 3 decimal places)"
+      "quantity_invalid": "not a quantity (digits, optionally up to 3 decimal places)",
+      "no_tax_in_force": "this product has no GST slab in force on {date}, so its price cannot be recomputed"
+    }
+  },
+  "office": {
+    "catalogue": {
+      "title": "Product master",
+      "view": {
+        "list": "List",
+        "product": "Single product",
+        "bulk": "Bulk grid",
+        "import": "Import"
+      },
+      "search": "Search",
+      "matching": {
+        "one": "{count} product matches",
+        "other": "{count} products match"
+      },
+      "product_id": "Product id",
+      "load": "Load",
+      "reason": "Reason",
+      "save": "Save",
+      "select_matching": "Select matching",
+      "select": "Select",
+      "selected": {
+        "one": "{count} product selected",
+        "other": "{count} products selected"
+      },
+      "set_field": "Change",
+      "to_value": "to",
+      "mrp_policy": "MRP",
+      "mrp_keep": "Keep — the shop absorbs the change",
+      "mrp_recompute": "Recompute — pass the change on",
+      "effective_from": "Effective from",
+      "apply": "Apply",
+      "choose_file": "Catalogue file",
+      "file_loaded": "{count} characters loaded",
+      "dry_run": "Check only",
+      "run_import": "Import",
+      "not_called": "Nothing requested yet.",
+      "failed": "Failed: {reason}",
+      "all": "All",
+      "filter_category": "Category",
+      "filter_slab": "GST rate",
+      "filter_status": "Status",
+      "status_active": "Active",
+      "status_discontinued": "Discontinued",
+      "below_reorder": "Below reorder level",
+      "showing": "Showing {shown} of {total}",
+      "previous": "Previous",
+      "next": "Next",
+      "none_found": "No products match.",
+      "item_code": "Code",
+      "edit": "Edit",
+      "new_product": "New product",
+      "create": "Create",
+      "cancel": "Cancel",
+      "editing": "Editing {name}",
+      "creating": "New product",
+      "saved": "Saved.",
+      "rejected_rows": "Not applied:",
+      "applied_count": "{count} applied",
+      "select_all": "Select all shown",
+      "clear_selection": "Clear",
+      "select_all_matching": "Select all {count} matching",
+      "hindi_note": "Leave blank to fall back to the English name.",
+      "short_name_note": "Prints on the receipt. 30 characters maximum.",
+      "sale_price_note": "Including GST. May not exceed MRP.",
+      "purchase_price_note": "Excluding GST.",
+      "effective_note": "Leave blank to apply now."
+    },
+    "signin": {
+      "title": "Who is at this machine?",
+      "choose": "Choose your name",
+      "enter": "Continue",
+      "signed_in_as": "Signed in as {name}",
+      "sign_out": "Sign out",
+      "nobody": "Nobody is signed in."
+    },
+    "field": {
+      "barcode": "Barcode",
+      "name": "Name",
+      "name_hi": "Hindi name",
+      "short_name": "Receipt name",
+      "hsn_code": "HSN code",
+      "tax_rate": "GST rate",
+      "mrp": "MRP",
+      "sale_price": "Sale price",
+      "purchase_price": "Purchase price",
+      "unit": "Unit",
+      "category": "Category",
+      "reorder_level": "Reorder level"
     }
   }
 }

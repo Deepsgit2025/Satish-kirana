@@ -3,14 +3,12 @@
     "en": "अंग्रेज़ी",
     "hi": "हिन्दी"
   },
-
   "cli": {
     "common": {
       "failed": "विफल: {detail}",
       "connection": "कनेक्शन सेटिंग्स PGHOST, PGPORT, PGDATABASE, PGUSER और PGPASSWORD से पढ़ी जाती हैं — देखें .env.example।",
       "option_help": "यह संदेश दिखाएँ।"
     },
-
     "migrate": {
       "usage": "प्रयोग: npm run db:migrate [-- --dry-run]",
       "option_dry_run": "लंबित माइग्रेशन लागू किए बिना सूचीबद्ध करें।",
@@ -31,7 +29,6 @@
       },
       "unreachable": "{target} तक नहीं पहुँच सके — क्या Postgres चल रहा है?"
     },
-
     "reconcile": {
       "usage": "प्रयोग: npm run db:reconcile",
       "description": "reconciliation_checks की हर जाँच चलाता है और परिणाम दर्ज करता है। कोई जाँच अंतर बताए या विफल हो तो 1 के साथ बाहर निकलता है।",
@@ -56,7 +53,6 @@
         "disabled": "बंद"
       }
     },
-
     "catalogue": {
       "usage": "प्रयोग: npm run catalogue:import -- <file.csv> [--dry-run]",
       "option_dry_run": "जाँचें और बताएँ, कुछ भी लिखे बिना।",
@@ -83,7 +79,6 @@
       }
     }
   },
-
   "error": {
     "tax": {
       "bill": {
@@ -105,19 +100,21 @@
         "mode_invalid": "राउंड-ऑफ़ मोड \"{mode}\" nearest, up, down में से नहीं है।"
       }
     },
-
     "csv": {
       "empty_file": "फ़ाइल खाली है।",
       "duplicate_heading": "कॉलम शीर्षक दोहराया गया है: {columns}।",
       "unterminated_quote": "पंक्ति {line} पर शुरू हुआ उद्धरण बंद नहीं हुआ। कोटेशन खुला रह गया, इसलिए फ़ाइल आगे नहीं पढ़ी जा सकती।"
     },
-
     "catalogue": {
       "missing_columns": "फ़ाइल में आवश्यक कॉलम नहीं हैं: {missing}। अपेक्षित शीर्षक: {expected}।",
-      "ambiguous_slab": "एक ही दर पर दो कर स्लैब लागू हैं ({slab})। आयात से पहले एक बंद करें।"
+      "ambiguous_slab": "एक ही दर पर दो कर स्लैब लागू हैं ({slab})। आयात से पहले एक बंद करें।",
+      "no_such_product": "यह उत्पाद कैटलॉग में नहीं है। हो सकता है इसे किसी दूसरी मशीन से हटाया गया हो — सूची ताज़ा करके फिर कोशिश करें।",
+      "invalid_date": "{value} ऐसी तारीख़ नहीं है जिसे सिस्टम पढ़ सके।",
+      "request_failed": "कैटलॉग यह काम पूरा नहीं कर सका। कुछ भी नहीं बदला गया। अगर यह बार-बार हो, तो डायग्नोस्टिक्स भेजें।",
+      "not_signed_in": "कोई साइन इन नहीं है, इसलिए इस बदलाव का कोई कर्ता नहीं है और यह किया नहीं गया। साइन इन करके फिर कोशिश करें।",
+      "unknown_employee": "यह कर्मचारी सक्रिय सूची में नहीं है। हो सकता है इन्होंने काम छोड़ दिया हो, या किसी दूसरी मशीन पर निष्क्रिय कर दिया गया हो।"
     }
   },
-
   "catalogue": {
     "issue": {
       "required": "आवश्यक है, पर खाली है",
@@ -132,7 +129,98 @@
       "money_not_positive": "शून्य से अधिक होना चाहिए",
       "sale_price_above_mrp": "mrp ({mrp}) से अधिक है — MRP कानूनी अधिकतम है",
       "unit_unknown": "इकाई मास्टर में यह इकाई नहीं है",
-      "quantity_invalid": "मात्रा नहीं है (अंक, अधिकतम 3 दशमलव स्थान तक)"
+      "quantity_invalid": "मात्रा नहीं है (अंक, अधिकतम 3 दशमलव स्थान तक)",
+      "no_tax_in_force": "{date} को इस उत्पाद पर कोई GST स्लैब लागू नहीं है, इसलिए इसका मूल्य दोबारा नहीं निकाला जा सकता"
+    }
+  },
+  "office": {
+    "catalogue": {
+      "title": "उत्पाद मास्टर",
+      "view": {
+        "list": "सूची",
+        "product": "एक उत्पाद",
+        "bulk": "सामूहिक ग्रिड",
+        "import": "आयात"
+      },
+      "search": "खोजें",
+      "matching": {
+        "one": "{count} उत्पाद मिला",
+        "other": "{count} उत्पाद मिले"
+      },
+      "product_id": "उत्पाद आईडी",
+      "load": "खोलें",
+      "reason": "कारण",
+      "save": "सहेजें",
+      "select_matching": "मिलते-जुलते चुनें",
+      "select": "चुनें",
+      "selected": {
+        "one": "{count} उत्पाद चुना गया",
+        "other": "{count} उत्पाद चुने गए"
+      },
+      "set_field": "बदलें",
+      "to_value": "से",
+      "mrp_policy": "MRP",
+      "mrp_keep": "वही रखें — दुकान बदलाव सहेगी",
+      "mrp_recompute": "दोबारा निकालें — बदलाव ग्राहक पर",
+      "effective_from": "इस तारीख़ से लागू",
+      "apply": "लागू करें",
+      "choose_file": "कैटलॉग फ़ाइल",
+      "file_loaded": "{count} अक्षर पढ़े गए",
+      "dry_run": "केवल जाँचें",
+      "run_import": "आयात करें",
+      "not_called": "अभी कुछ नहीं माँगा गया।",
+      "failed": "विफल: {reason}",
+      "all": "सभी",
+      "filter_category": "श्रेणी",
+      "filter_slab": "GST दर",
+      "filter_status": "स्थिति",
+      "status_active": "सक्रिय",
+      "status_discontinued": "बंद",
+      "below_reorder": "पुनःभंडारण स्तर से नीचे",
+      "showing": "{total} में से {shown} दिख रहे हैं",
+      "previous": "पिछला",
+      "next": "अगला",
+      "none_found": "कोई उत्पाद नहीं मिला।",
+      "item_code": "कोड",
+      "edit": "बदलें",
+      "new_product": "नया उत्पाद",
+      "create": "बनाएँ",
+      "cancel": "रद्द करें",
+      "editing": "{name} में बदलाव",
+      "creating": "नया उत्पाद",
+      "saved": "सहेजा गया।",
+      "rejected_rows": "लागू नहीं हुए:",
+      "applied_count": "{count} लागू हुए",
+      "select_all": "दिख रहे सभी चुनें",
+      "clear_selection": "हटाएँ",
+      "select_all_matching": "मिलते सभी {count} चुनें",
+      "hindi_note": "खाली छोड़ें तो अंग्रेज़ी नाम इस्तेमाल होगा।",
+      "short_name_note": "रसीद पर छपता है। अधिकतम 30 अक्षर।",
+      "sale_price_note": "GST सहित। MRP से अधिक नहीं।",
+      "purchase_price_note": "GST को छोड़कर।",
+      "effective_note": "खाली छोड़ें तो अभी लागू होगा।"
+    },
+    "signin": {
+      "title": "इस मशीन पर कौन है?",
+      "choose": "अपना नाम चुनें",
+      "enter": "आगे बढ़ें",
+      "signed_in_as": "{name} के रूप में साइन इन",
+      "sign_out": "साइन आउट",
+      "nobody": "कोई साइन इन नहीं है।"
+    },
+    "field": {
+      "barcode": "बारकोड",
+      "name": "नाम",
+      "name_hi": "हिंदी नाम",
+      "short_name": "रसीद पर नाम",
+      "hsn_code": "HSN कोड",
+      "tax_rate": "GST दर",
+      "mrp": "MRP",
+      "sale_price": "विक्रय मूल्य",
+      "purchase_price": "क्रय मूल्य",
+      "unit": "इकाई",
+      "category": "श्रेणी",
+      "reorder_level": "पुनःभंडारण स्तर"
     }
   }
 }

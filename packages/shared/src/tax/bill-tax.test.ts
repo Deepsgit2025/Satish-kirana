@@ -5,6 +5,7 @@ import {
   type BillLineInput,
   type ComputedBill,
   computeBillTax,
+  restateInclusivePrice,
   type RoundOffPolicy,
   TaxInputError,
   type TaxRateSnapshot,
@@ -441,4 +442,43 @@ describe('every bill ties out', () => {
       });
     });
   }
+});
+
+describe('restateInclusivePrice', () => {
+  it('holds the ex-tax amount when a rate rises', () => {
+    // ₹100 inclusive at 5% is ₹95.238... ex-tax. Passed on at 18% that is
+    // 95.238... x 1.18 = ₹112.38, and the shop keeps what it kept before.
+    expect(restateInclusivePrice(100, 5, 18)).toBe(112.38);
+  });
+
+  it('holds it when a rate falls', () => {
+    expect(restateInclusivePrice(112.38, 18, 5)).toBe(100);
+  });
+
+  it('is a no-op when the rate does not move', () => {
+    // A bulk reassignment can include products already on the target slab -
+    // selecting a whole category to move will do it. Those must not drift.
+    for (const price of [1, 44, 99.99, 495, 5000.55]) {
+      expect(restateInclusivePrice(price, 18, 18)).toBe(price);
+    }
+  });
+
+  it('restates to and from zero-rated', () => {
+    expect(restateInclusivePrice(105, 5, 0)).toBe(100);
+    expect(restateInclusivePrice(100, 0, 5)).toBe(105);
+  });
+
+  it('rounds once, at the end', () => {
+    // Rounding the ex-tax figure first gives 41.90 x 1.18 = 49.44. Carrying it
+    // unrounded gives 41.9047... x 1.18 = 49.4476..., which is 49.45. One paisa
+    // per product, in the same direction, across every SKU in the run.
+    expect(restateInclusivePrice(44, 5, 18)).toBe(49.45);
+  });
+
+  it('refuses a negative price or a negative rate', () => {
+    expect(() => restateInclusivePrice(-1, 5, 18)).toThrow(RangeError);
+    expect(() => restateInclusivePrice(100, -5, 18)).toThrow(RangeError);
+    expect(() => restateInclusivePrice(100, 5, -18)).toThrow(RangeError);
+    expect(() => restateInclusivePrice(Number.NaN, 5, 18)).toThrow(RangeError);
+  });
 });

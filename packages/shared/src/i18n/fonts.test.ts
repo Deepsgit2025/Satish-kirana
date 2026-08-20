@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { DEVANAGARI_FACES, devanagariFont, fontPath, fontStack } from './fonts.js';
+import { DEVANAGARI_FACES, devanagariFont, fontStack } from './fonts.js';
+import { fontPath } from './font-files.js';
 
 /**
  * That the font is really there, and is really the kind of font a receipt

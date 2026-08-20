@@ -500,3 +500,50 @@ function roundOffFor(total: number, policy: RoundOffPolicy): number {
 
   return roundMoney((target - totalMinor) / 100);
 }
+
+/**
+ * Restates a tax-inclusive price from one total tax rate to another, holding
+ * what the shop keeps constant.
+ *
+ * This is the "recompute" half of a bulk tax reassignment (build-order step 7).
+ * A product moving from 5% to 18% either **absorbs** the change — the shelf
+ * price stands and the shop earns less on every sale — or **passes it on**,
+ * which means the printed price moves so that the ex-tax amount does not. This
+ * computes the second one. Absorbing needs no arithmetic at all, which is the
+ * asymmetry that makes it tempting to write this inline at the call site.
+ *
+ * It lives here because invariant 1 puts every tax formula in this file, and
+ * because a bulk run applies it to hundreds of products in one transaction: a
+ * second implementation that rounded differently would be discovered as a
+ * paisa-per-line disagreement between the shelf label and the till.
+ *
+ *     ex_tax   = price / (1 + from_rate/100)
+ *     restated = round(ex_tax x (1 + to_rate/100), 2)
+ *
+ * **Rounded once, at the end.** Rounding the intermediate ex-tax figure first
+ * would bias every product in the run the same way, which is how a rate change
+ * across 2,000 SKUs turns into a visible drift in margin.
+ *
+ * Rates are total rates — CGST + SGST + IGST + cess, the same sum
+ * `prepareLine` divides by. Passing a half rate here halves the tax.
+ */
+export function restateInclusivePrice(
+  price: number,
+  fromTotalRate: number,
+  toTotalRate: number,
+): number {
+  // A RangeError rather than a TaxInputError, for the reason roundMoney throws
+  // one: these arrive from tax_slabs and product_prices, so a bad value is a
+  // caller's bug and has no reader who needs it in Hindi (D39).
+  if (!Number.isFinite(price) || price < 0) {
+    throw new RangeError(`Cannot restate ${String(price)}: expected a price of zero or more.`);
+  }
+  for (const rate of [fromTotalRate, toTotalRate]) {
+    if (!Number.isFinite(rate) || rate < 0) {
+      throw new RangeError(`Cannot restate at rate ${String(rate)}: expected zero or more.`);
+    }
+  }
+
+  const exTax = price / (1 + fromTotalRate / 100);
+  return roundMoney(exTax * (1 + toTotalRate / 100));
+}
