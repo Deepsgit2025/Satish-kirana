@@ -9,7 +9,9 @@
     "sourceMap": false,
     "types": ["node"],
     "paths": {
-      "@ssbazar/shared": ["./packages/shared/src/index.ts"]
+      "@ssbazar/shared": ["./packages/shared/src/index.ts"],
+      "@ssbazar/server": ["./server/src/index.ts"],
+      "@ssbazar/shared/catalogue": ["./packages/shared/src/catalogue/contract.ts"]
     }
   },
   "include": [
@@ -17,6 +19,8 @@
     "packages/*/src/**/*.json",
     "server/src/**/*.ts",
     "apps/*/src/**/*.ts",
-    "vitest.config.ts"
-  ]
+    "vitest.config.ts",
+    "apps/*/vite*.config.ts"
+  ],
+  "exclude": ["apps/office/src/renderer/**"]
 }

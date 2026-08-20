@@ -8,6 +8,13 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../../packages/shared/tsconfig.build.json" }]
+  "exclude": ["src/**/*.test.ts", "src/renderer/**", "src/preload/**"],
+  "references": [
+    {
+      "path": "../../packages/shared/tsconfig.build.json"
+    },
+    {
+      "path": "../../server/tsconfig.build.json"
+    }
+  ]
 }

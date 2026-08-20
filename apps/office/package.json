@@ -4,11 +4,17 @@
   "private": true,
   "description": "Back office (Electron) - catalogue, purchases, reports",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/main/index.js",
   "scripts": {
-    "build": "tsc -b tsconfig.build.json"
+    "build": "tsc -b tsconfig.build.json && vite build && vite build --config vite.preload.config.ts",
+    "build:renderer": "vite build",
+    "build:preload": "vite build --config vite.preload.config.ts",
+    "dev": "vite"
   },
   "dependencies": {
-    "@ssbazar/shared": "*"
+    "@ssbazar/server": "*",
+    "@ssbazar/shared": "*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }
