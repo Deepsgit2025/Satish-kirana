@@ -1,0 +1,138 @@
+{
+  "language": {
+    "en": "अंग्रेज़ी",
+    "hi": "हिन्दी"
+  },
+
+  "cli": {
+    "common": {
+      "failed": "विफल: {detail}",
+      "connection": "कनेक्शन सेटिंग्स PGHOST, PGPORT, PGDATABASE, PGUSER और PGPASSWORD से पढ़ी जाती हैं — देखें .env.example।",
+      "option_help": "यह संदेश दिखाएँ।"
+    },
+
+    "migrate": {
+      "usage": "प्रयोग: npm run db:migrate [-- --dry-run]",
+      "option_dry_run": "लंबित माइग्रेशन लागू किए बिना सूचीबद्ध करें।",
+      "option_lang": "इसी भाषा में दिखाएँ (en या hi), स्टोर डिफ़ॉल्ट चाहे जो हो।",
+      "target": "{database}, {host}:{port} पर",
+      "default_database": "(डिफ़ॉल्ट डेटाबेस)",
+      "none_present": "server/migrations में अभी कोई माइग्रेशन नहीं है",
+      "plan": "{applied} पहले से लागू, {pending} लंबित",
+      "would_apply": "{filename} लागू किया जाता",
+      "applied_file": "{filename} लागू किया ({durationMs} ms)",
+      "dry_run_summary": {
+        "one": "ड्राई रन: {count} माइग्रेशन लागू किया जाता",
+        "other": "ड्राई रन: {count} माइग्रेशन लागू किए जाते"
+      },
+      "done": {
+        "one": "पूर्ण: {count} माइग्रेशन लागू हुआ",
+        "other": "पूर्ण: {count} माइग्रेशन लागू हुए"
+      },
+      "unreachable": "{target} तक नहीं पहुँच सके — क्या Postgres चल रहा है?"
+    },
+
+    "reconcile": {
+      "usage": "प्रयोग: npm run db:reconcile",
+      "description": "reconciliation_checks की हर जाँच चलाता है और परिणाम दर्ज करता है। कोई जाँच अंतर बताए या विफल हो तो 1 के साथ बाहर निकलता है।",
+      "option_lang": "इसी भाषा में दिखाएँ (en या hi), स्टोर डिफ़ॉल्ट चाहे जो हो।",
+      "clean": "कोई अंतर नहीं",
+      "outstanding": {
+        "one": "{count} बाकी",
+        "other": "{count} बाकी"
+      },
+      "outstanding_detail": "{summary} — {detail}",
+      "timing": "({durationMs} ms, {corrected} सुधारे गए)",
+      "unattended": "{check} {health} है — इस जाँच को कोई नहीं चला रहा",
+      "status": {
+        "ok": "ठीक",
+        "drift": "अंतर",
+        "failed": "विफल"
+      },
+      "health": {
+        "ok": "ठीक",
+        "overdue": "समय बीत चुका",
+        "never_run": "कभी नहीं चली",
+        "disabled": "बंद"
+      }
+    },
+
+    "catalogue": {
+      "usage": "प्रयोग: npm run catalogue:import -- <file.csv> [--dry-run]",
+      "option_dry_run": "जाँचें और बताएँ, कुछ भी लिखे बिना।",
+      "option_lang": "इसी भाषा में दिखाएँ (en या hi), स्टोर डिफ़ॉल्ट चाहे जो हो।",
+      "columns": "कॉलम: {columns}।",
+      "docs": "docs/catalogue-import.md देखें, और शुरू करने के लिए docs/catalogue-template.csv।",
+      "no_file": "कोई फ़ाइल नहीं दी — आयात करने वाली CSV का नाम दें",
+      "rows_read": {
+        "one": "{file}: {count} पंक्ति",
+        "other": "{file}: {count} पंक्तियाँ"
+      },
+      "dry_run_result": "{importable} आयात होतीं, {rejected} अस्वीकृत",
+      "result": "{imported} आयात हुईं, {rejected} अस्वीकृत",
+      "categories_created": "श्रेणियाँ बनाईं: {names}",
+      "hsn_codes_created": "HSN कोड जोड़े: {codes}",
+      "rejected_heading": "अस्वीकृत पंक्तियाँ — पंक्ति संख्याएँ स्प्रेडशीट से मेल खाती हैं:",
+      "dry_run_note": "ड्राई रन — कुछ भी नहीं लिखा गया",
+      "unreadable": "फ़ाइल पढ़ी नहीं जा सकी: {detail}",
+      "heading": {
+        "line": "पंक्ति",
+        "column": "कॉलम",
+        "value": "मान",
+        "reason": "कारण"
+      }
+    }
+  },
+
+  "error": {
+    "tax": {
+      "bill": {
+        "no_lines": "बिल का कुल जोड़ने के लिए कम से कम एक पंक्ति चाहिए।",
+        "discount_invalid": "बिल छूट {amount} धनात्मक राशि नहीं है।",
+        "discount_exceeds_total": "बिल छूट {discount} बिल के {total} से अधिक है।"
+      },
+      "line": {
+        "qty_invalid": "पंक्ति {line}: मात्रा शून्य से अधिक होनी चाहिए।",
+        "rate_invalid": "पंक्ति {line}: दर शून्य या उससे अधिक होनी चाहिए।",
+        "tax_rate_invalid": "पंक्ति {line}: {tax} दर {rate} मान्य दर नहीं है।",
+        "igst_with_cgst": "पंक्ति {line}: आपूर्ति या तो राज्य के भीतर (CGST + SGST) होती है या राज्य के बाहर (IGST) — दोनों नहीं।",
+        "discount_invalid": "पंक्ति {line}: छूट {amount} धनात्मक राशि नहीं है।",
+        "discount_exceeds_line": "पंक्ति {line}: छूट {discount} पंक्ति के {total} से अधिक है।"
+      },
+      "roundoff": {
+        "increment_invalid": "राउंड-ऑफ़ इकाई {increment} शून्य से अधिक होनी चाहिए।",
+        "increment_below_paisa": "राउंड-ऑफ़ इकाई {increment} एक पैसे से भी छोटी है।",
+        "mode_invalid": "राउंड-ऑफ़ मोड \"{mode}\" nearest, up, down में से नहीं है।"
+      }
+    },
+
+    "csv": {
+      "empty_file": "फ़ाइल खाली है।",
+      "duplicate_heading": "कॉलम शीर्षक दोहराया गया है: {columns}।",
+      "unterminated_quote": "पंक्ति {line} पर शुरू हुआ उद्धरण बंद नहीं हुआ। कोटेशन खुला रह गया, इसलिए फ़ाइल आगे नहीं पढ़ी जा सकती।"
+    },
+
+    "catalogue": {
+      "missing_columns": "फ़ाइल में आवश्यक कॉलम नहीं हैं: {missing}। अपेक्षित शीर्षक: {expected}।",
+      "ambiguous_slab": "एक ही दर पर दो कर स्लैब लागू हैं ({slab})। आयात से पहले एक बंद करें।"
+    }
+  },
+
+  "catalogue": {
+    "issue": {
+      "required": "आवश्यक है, पर खाली है",
+      "too_long": "{limit} अक्षरों से लंबा है ({length})",
+      "field_count": "इसमें {actual} मान हैं जबकि शीर्षक में {expected} — नाम के भीतर आए अल्पविराम के लिए मान को दोहरे उद्धरण में रखें",
+      "barcode_duplicate_in_file": "इसी फ़ाइल की पंक्ति {line} पर पहले से इस्तेमाल हुआ है",
+      "barcode_in_system": "पहले से किसी उत्पाद पर मौजूद है",
+      "hsn_not_six_digits": "ठीक 6 अंकों का होना चाहिए",
+      "rate_not_a_percentage": "प्रतिशत नहीं है (जैसे 5, 12.5, 18)",
+      "rate_no_slab_in_force": "इस दर पर कोई GST स्लैब लागू नहीं है",
+      "money_invalid": "राशि नहीं है (अंक, अधिकतम 2 दशमलव स्थान तक)",
+      "money_not_positive": "शून्य से अधिक होना चाहिए",
+      "sale_price_above_mrp": "mrp ({mrp}) से अधिक है — MRP कानूनी अधिकतम है",
+      "unit_unknown": "इकाई मास्टर में यह इकाई नहीं है",
+      "quantity_invalid": "मात्रा नहीं है (अंक, अधिकतम 3 दशमलव स्थान तक)"
+    }
+  }
+}

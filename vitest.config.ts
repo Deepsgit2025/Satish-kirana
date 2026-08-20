@@ -10,14 +10,14 @@ const alias = {
   '@ssbazar/shared': fileURLToPath(new URL('./packages/shared/src/index.ts', import.meta.url)),
 };
 
-function workspaceProject(name: string, root: string) {
+function workspaceProject(name: string, root: string, include = ['src/**/*.test.ts']) {
   return {
     resolve: { alias },
     test: {
       name,
       root,
       environment: 'node',
-      include: ['src/**/*.test.ts'],
+      include,
     },
   };
 }
@@ -29,6 +29,9 @@ export default defineConfig({
       workspaceProject('server', './server'),
       workspaceProject('counter', './apps/counter'),
       workspaceProject('office', './apps/office'),
+      // The ESLint plugin is plain JS - it is loaded by eslint.config.js, which
+      // is not part of the typed program - so its tests are .js too.
+      workspaceProject('tools', './tools/eslint-plugin-ssbazar', ['src/**/*.test.js']),
     ],
   },
 });

@@ -192,7 +192,7 @@ describe('importCatalogue', () => {
       );
 
       expect(report.imported).toBe(0);
-      expect(report.issues.at(0)?.reason).toBe('no GST slab in force at this rate');
+      expect(report.issues.at(0)?.reasonKey).toBe('catalogue.issue.rate_no_slab_in_force');
     });
   });
 
@@ -203,7 +203,7 @@ describe('importCatalogue', () => {
       const second = await importCatalogue(db, file(RICE));
 
       expect(second.imported).toBe(0);
-      expect(second.issues.at(0)?.reason).toBe('already on a product in the system');
+      expect(second.issues.at(0)?.reasonKey).toBe('catalogue.issue.barcode_in_system');
     });
   });
 

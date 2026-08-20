@@ -1,3 +1,5 @@
+import type { TranslatableMessage } from '@ssbazar/shared';
+
 import {
   type AppliedMigration,
   type MigrationFile,
@@ -26,7 +28,12 @@ export interface MigrationSource {
 export interface RunOptions {
   /** Report what would be applied without touching the schema. */
   readonly dryRun?: boolean;
-  readonly log?: (message: string) => void;
+  /**
+   * Progress, as translation keys rather than sentences. The runner knows what
+   * happened; only the CLI at the edge knows which language to say it in
+   * (CLAUDE.md invariant 19).
+   */
+  readonly report?: (message: TranslatableMessage) => void;
 }
 
 export interface RunResult {
@@ -140,7 +147,7 @@ export async function runMigrations(
   sources: readonly MigrationSource[],
   options: RunOptions = {},
 ): Promise<RunResult> {
-  const log = options.log ?? ((): void => undefined);
+  const report = options.report ?? ((): void => undefined);
   const dryRun = options.dryRun ?? false;
 
   await ensureSchemaMigrationsTable(db);
@@ -156,10 +163,15 @@ export async function runMigrations(
       checksums,
     );
 
-    log(`${String(plan.appliedCount)} already applied, ${String(plan.pending.length)} pending`);
+    report({
+      messageKey: 'cli.migrate.plan',
+      params: { applied: plan.appliedCount, pending: plan.pending.length },
+    });
 
     if (dryRun) {
-      for (const file of plan.pending) log(`would apply ${file.filename}`);
+      for (const file of plan.pending) {
+        report({ messageKey: 'cli.migrate.would_apply', params: { filename: file.filename } });
+      }
       return { applied: [], pending: plan.pending, alreadyApplied: plan.appliedCount };
     }
 
@@ -173,7 +185,10 @@ export async function runMigrations(
 
       const elapsedMs = await applyMigration(db, source);
       appliedNow.push(file);
-      log(`applied ${file.filename} (${String(elapsedMs)} ms)`);
+      report({
+        messageKey: 'cli.migrate.applied_file',
+        params: { filename: file.filename, durationMs: elapsedMs },
+      });
     }
 
     return { applied: appliedNow, pending: [], alreadyApplied: plan.appliedCount };

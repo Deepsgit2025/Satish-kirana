@@ -40,9 +40,18 @@ function validate(...rows: string[]) {
   return validateCatalogueRows(readCsvTable([HEADER, ...rows].join('\n')), lookups);
 }
 
-/** All the reasons a given line was rejected. */
+/**
+ * All the reasons a given line was rejected, as catalogue keys.
+ *
+ * Keys rather than sentences on purpose. The rule being tested is "a rate with
+ * no slab in force is rejected", not "the message reads *no GST slab in force
+ * at this rate*", and asserting the second means every improvement to the
+ * wording breaks a test that has nothing to do with wording. That the key
+ * resolves to a real sentence in both languages is checked once, in
+ * packages/shared/src/i18n/catalogue.test.ts, rather than in every case here.
+ */
 function reasons(result: ReturnType<typeof validate>, line: number): string[] {
-  return result.issues.filter((issue) => issue.line === line).map((issue) => issue.reason);
+  return result.issues.filter((issue) => issue.line === line).map((issue) => issue.reasonKey);
 }
 
 describe('validateCatalogueRows', () => {
@@ -89,11 +98,11 @@ describe('validateCatalogueRows', () => {
 
     expect(reasons({ valid: [], issues }, 2)).toEqual(
       expect.arrayContaining([
-        'required, but blank',
-        'must be exactly 6 digits',
-        'no GST slab in force at this rate',
-        'must be greater than zero',
-        'not a unit in the units master',
+        'catalogue.issue.required',
+        'catalogue.issue.hsn_not_six_digits',
+        'catalogue.issue.rate_no_slab_in_force',
+        'catalogue.issue.money_not_positive',
+        'catalogue.issue.unit_unknown',
       ]),
     );
   });
@@ -106,18 +115,22 @@ describe('validateCatalogueRows', () => {
       expect(issues.at(0)).toMatchObject({
         line: 3,
         column: 'barcode',
-        reason: 'already used on line 2 of this file',
+        reasonKey: 'catalogue.issue.barcode_duplicate_in_file',
+        reasonParams: { line: 2 },
       });
     });
 
     it('points a third repeat back at the first appearance, not the second', () => {
       const { issues } = validate(GOOD_ROW, GOOD_ROW, GOOD_ROW);
-      expect(reasons({ valid: [], issues }, 4)).toEqual(['already used on line 2 of this file']);
+      expect(reasons({ valid: [], issues }, 4)).toEqual([
+        'catalogue.issue.barcode_duplicate_in_file',
+      ]);
+      expect(issues.at(0)?.reasonParams).toEqual({ line: 2 });
     });
 
     it('rejects one already on a product in the system', () => {
       const { issues } = validate('8909999999999,Dup,,DUP,100630,5,100,90,80,Kg,,');
-      expect(reasons({ valid: [], issues }, 2)).toEqual(['already on a product in the system']);
+      expect(reasons({ valid: [], issues }, 2)).toEqual(['catalogue.issue.barcode_in_system']);
     });
   });
 
@@ -125,9 +138,10 @@ describe('validateCatalogueRows', () => {
     it('rejects a sale price above MRP', () => {
       // Selling above the printed maximum is an offence, not a pricing choice.
       const { issues } = validate('890,X,,X,100630,5,100,120,80,Kg,,');
-      expect(reasons({ valid: [], issues }, 2)).toEqual([
-        'higher than mrp (100) — MRP is a legal maximum',
-      ]);
+      expect(issues.at(0)).toMatchObject({
+        reasonKey: 'catalogue.issue.sale_price_above_mrp',
+        reasonParams: { mrp: '100' },
+      });
     });
 
     it('accepts a sale price equal to MRP', () => {
@@ -141,10 +155,8 @@ describe('validateCatalogueRows', () => {
         '891,Y,,Y,100630,5,10.999,5,,Kg,,',
       );
 
-      expect(reasons({ valid: [], issues }, 2)).toEqual(['must be greater than zero']);
-      expect(reasons({ valid: [], issues }, 3)).toEqual([
-        'not a money amount (digits, optionally with up to 2 decimal places)',
-      ]);
+      expect(reasons({ valid: [], issues }, 2)).toEqual(['catalogue.issue.money_not_positive']);
+      expect(reasons({ valid: [], issues }, 3)).toEqual(['catalogue.issue.money_invalid']);
     });
 
     it('defaults a blank purchase price to zero', () => {
@@ -175,7 +187,7 @@ describe('validateCatalogueRows', () => {
       // 12% was abolished in the GST 2.0 rationalisation. A spreadsheet
       // carried over from before it will be full of these.
       const { issues } = validate('890,X,,X,100630,12,100,90,,Kg,,');
-      expect(reasons({ valid: [], issues }, 2)).toEqual(['no GST slab in force at this rate']);
+      expect(reasons({ valid: [], issues }, 2)).toEqual(['catalogue.issue.rate_no_slab_in_force']);
     });
   });
 
@@ -203,7 +215,10 @@ describe('validateCatalogueRows', () => {
       );
       const { issues } = validateCatalogueRows(table, lookups);
 
-      expect(issues.at(0)?.reason).toMatch(/needs the value wrapped in double quotes/);
+      expect(issues.at(0)).toMatchObject({
+        reasonKey: 'catalogue.issue.field_count',
+        reasonParams: { actual: 13, expected: 12 },
+      });
     });
 
     it('refuses a file missing a required heading', () => {

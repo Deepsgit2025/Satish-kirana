@@ -4,6 +4,7 @@ import { asRow, firstRow, readId, readNumeric, readText } from '../db/rows.js';
 import { readCsvTable } from './csv.js';
 import {
   type CatalogueLookups,
+  CatalogueFileError,
   rateKey,
   type RowIssue,
   type ValidCatalogueRow,
@@ -95,10 +96,9 @@ export async function loadCatalogueLookups(db: Queryable): Promise<CatalogueLook
     if (existing !== undefined) {
       // Two slabs in force at one rate makes "tax_rate 5" ambiguous, and
       // guessing would put a rate on thousands of products by coin toss.
-      throw new Error(
-        `Two tax slabs are in force at the same rate (${readText(row, 'name')}). ` +
-          'Close one before importing.',
-      );
+      throw new CatalogueFileError('error.catalogue.ambiguous_slab', {
+        slab: readText(row, 'name'),
+      });
     }
     slabIdByRate.set(key, readId(row, 'id'));
   }

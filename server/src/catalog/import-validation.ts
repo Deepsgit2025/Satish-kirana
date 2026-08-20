@@ -1,3 +1,5 @@
+import { type MessageParams, TranslatableError, type TranslationKey } from '@ssbazar/shared';
+
 import type { CsvRow, CsvTable } from './csv.js';
 
 /**
@@ -20,14 +22,26 @@ import type { CsvRow, CsvTable } from './csv.js';
  *
  * A missing column heading *is* fatal, because it is a property of the file
  * rather than of a row, and every row would report the same thing.
+ *
+ * **No reason is written as a sentence here.** Every one is a key into
+ * `catalogue.issue.*` plus the numbers that go in it. The client keying the
+ * spreadsheet is the person who reads this report, and `--dry-run` against his
+ * own file is the whole reason the import core shipped before any screen
+ * (`docs/DECISIONS.md` D34) - a report he cannot read is a report that does not
+ * do its job. Rendering happens once, in the CLI, in his language.
  */
+
+/** The `catalogue.issue.*` half of the catalogue, and nothing else. */
+export type IssueKey = Extract<TranslationKey, `catalogue.issue.${string}`>;
 
 export interface RowIssue {
   /** Physical line in the file - what the spreadsheet's row gutter shows. */
   readonly line: number;
   readonly column: string;
   readonly value: string;
-  readonly reason: string;
+  /** Why the row was left out, as a key - never as English. */
+  readonly reasonKey: IssueKey;
+  readonly reasonParams: MessageParams;
 }
 
 /** A row that passed every check, with lookups already resolved to ids. */
@@ -61,9 +75,12 @@ export interface ValidationResult {
   readonly issues: RowIssue[];
 }
 
-export class CatalogueFileError extends Error {
-  constructor(message: string) {
-    super(message);
+type CatalogueErrorKey = Extract<TranslationKey, `error.catalogue.${string}`>;
+
+/** The file itself is unusable. Same reasoning as `CsvError`. */
+export class CatalogueFileError extends TranslatableError {
+  constructor(messageKey: CatalogueErrorKey, params: MessageParams = {}) {
+    super(messageKey, params);
     this.name = 'CatalogueFileError';
   }
 }
@@ -122,15 +139,21 @@ class RowChecker {
     return this.row.values.get(column) ?? '';
   }
 
-  fail(column: string, reason: string): void {
-    this.issues.push({ line: this.row.line, column, value: this.value(column), reason });
+  fail(column: string, reasonKey: IssueKey, reasonParams: MessageParams = {}): void {
+    this.issues.push({
+      line: this.row.line,
+      column,
+      value: this.value(column),
+      reasonKey,
+      reasonParams,
+    });
   }
 
   /** Present and non-empty, or an issue. */
   required(column: string): string | null {
     const value = this.value(column);
     if (value.length === 0) {
-      this.fail(column, 'required, but blank');
+      this.fail(column, 'catalogue.issue.required');
       return null;
     }
     return value;
@@ -138,7 +161,7 @@ class RowChecker {
 
   maxLength(column: string, value: string, limit: number): boolean {
     if (value.length <= limit) return true;
-    this.fail(column, `longer than ${String(limit)} characters (${String(value.length)})`);
+    this.fail(column, 'catalogue.issue.too_long', { limit, length: value.length });
     return false;
   }
 }
@@ -146,10 +169,10 @@ class RowChecker {
 function checkHeader(table: CsvTable): void {
   const missing = REQUIRED_COLUMNS.filter((column) => !table.columns.includes(column));
   if (missing.length > 0) {
-    throw new CatalogueFileError(
-      `The file is missing required column(s): ${missing.join(', ')}. ` +
-        `Expected headings: ${[...REQUIRED_COLUMNS, ...OPTIONAL_COLUMNS].join(', ')}.`,
-    );
+    throw new CatalogueFileError('error.catalogue.missing_columns', {
+      missing: missing.join(', '),
+      expected: [...REQUIRED_COLUMNS, ...OPTIONAL_COLUMNS].join(', '),
+    });
   }
 }
 
@@ -164,7 +187,7 @@ function checkBarcode(
 
   const earlier = firstSeenAt.get(barcode);
   if (earlier !== undefined) {
-    checker.fail('barcode', `already used on line ${String(earlier)} of this file`);
+    checker.fail('barcode', 'catalogue.issue.barcode_duplicate_in_file', { line: earlier });
     return null;
   }
   // Claimed even when the row fails elsewhere, so a barcode repeated three
@@ -173,7 +196,7 @@ function checkBarcode(
   firstSeenAt.set(barcode, checker.line);
 
   if (lookups.existingBarcodes.has(barcode)) {
-    checker.fail('barcode', 'already on a product in the system');
+    checker.fail('barcode', 'catalogue.issue.barcode_in_system');
     return null;
   }
   return barcode;
@@ -186,15 +209,15 @@ function checkMoney(
 ): string | null {
   const raw = checker.value(column);
   if (raw.length === 0) {
-    if (options.positive) checker.fail(column, 'required, but blank');
+    if (options.positive) checker.fail(column, 'catalogue.issue.required');
     return options.positive ? null : '0';
   }
   if (!MONEY.test(raw)) {
-    checker.fail(column, 'not a money amount (digits, optionally with up to 2 decimal places)');
+    checker.fail(column, 'catalogue.issue.money_invalid');
     return null;
   }
   if (options.positive && !isPositive(raw)) {
-    checker.fail(column, 'must be greater than zero');
+    checker.fail(column, 'catalogue.issue.money_not_positive');
     return null;
   }
   return raw;
@@ -211,11 +234,10 @@ function checkRow(
   if (row.fieldCount !== columnCount) {
     // Almost always an unquoted comma inside a name. Naming the likely cause
     // saves the client from counting columns by hand.
-    checker.fail(
-      '(row)',
-      `has ${String(row.fieldCount)} values but the heading has ${String(columnCount)} — ` +
-        'a comma inside a name needs the value wrapped in double quotes',
-    );
+    checker.fail('(row)', 'catalogue.issue.field_count', {
+      actual: row.fieldCount,
+      expected: columnCount,
+    });
     return { issues: checker.issues };
   }
 
@@ -226,18 +248,18 @@ function checkRow(
 
   const hsnCode = checker.required('hsn_code');
   if (hsnCode !== null && !HSN.test(hsnCode)) {
-    checker.fail('hsn_code', 'must be exactly 6 digits');
+    checker.fail('hsn_code', 'catalogue.issue.hsn_not_six_digits');
   }
 
   let taxSlabId: number | undefined;
   const rateText = checker.required('tax_rate');
   if (rateText !== null) {
     if (!RATE.test(rateText)) {
-      checker.fail('tax_rate', 'not a percentage (for example 5, 12.5, 18)');
+      checker.fail('tax_rate', 'catalogue.issue.rate_not_a_percentage');
     } else {
       taxSlabId = lookups.slabIdByRate.get(rateKey(Number.parseFloat(rateText)));
       if (taxSlabId === undefined) {
-        checker.fail('tax_rate', 'no GST slab in force at this rate');
+        checker.fail('tax_rate', 'catalogue.issue.rate_no_slab_in_force');
       }
     }
   }
@@ -250,14 +272,14 @@ function checkRow(
   // pricing decision. Catching it here is far cheaper than catching it on a
   // shelf label (docs/DECISIONS.md D16).
   if (mrp !== null && salePrice !== null && Number.parseFloat(salePrice) > Number.parseFloat(mrp)) {
-    checker.fail('sale_price', `higher than mrp (${mrp}) — MRP is a legal maximum`);
+    checker.fail('sale_price', 'catalogue.issue.sale_price_above_mrp', { mrp });
   }
 
   let baseUnitId: number | undefined;
   const unit = checker.required('unit');
   if (unit !== null) {
     baseUnitId = lookups.unitIdByName.get(unit.toLowerCase());
-    if (baseUnitId === undefined) checker.fail('unit', 'not a unit in the units master');
+    if (baseUnitId === undefined) checker.fail('unit', 'catalogue.issue.unit_unknown');
   }
 
   const categoryRaw = checker.value('category');
@@ -270,7 +292,7 @@ function checkRow(
     if (QUANTITY.test(reorderRaw)) {
       reorderLevel = reorderRaw;
     } else {
-      checker.fail('reorder_level', 'not a quantity (digits, optionally up to 3 decimal places)');
+      checker.fail('reorder_level', 'catalogue.issue.quantity_invalid');
     }
   }
 

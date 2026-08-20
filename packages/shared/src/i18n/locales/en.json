@@ -1,0 +1,138 @@
+{
+  "language": {
+    "en": "English",
+    "hi": "Hindi"
+  },
+
+  "cli": {
+    "common": {
+      "failed": "failed: {detail}",
+      "connection": "Connection settings are read from PGHOST, PGPORT, PGDATABASE, PGUSER and PGPASSWORD — see .env.example.",
+      "option_help": "Show this message."
+    },
+
+    "migrate": {
+      "usage": "Usage: npm run db:migrate [-- --dry-run]",
+      "option_dry_run": "List pending migrations without applying them.",
+      "option_lang": "Print in this language (en or hi), whatever the store default is.",
+      "target": "{database} at {host}:{port}",
+      "default_database": "(default database)",
+      "none_present": "no migrations in server/migrations yet",
+      "plan": "{applied} already applied, {pending} pending",
+      "would_apply": "would apply {filename}",
+      "applied_file": "applied {filename} ({durationMs} ms)",
+      "dry_run_summary": {
+        "one": "dry run: {count} migration would be applied",
+        "other": "dry run: {count} migrations would be applied"
+      },
+      "done": {
+        "one": "done: {count} migration applied",
+        "other": "done: {count} migrations applied"
+      },
+      "unreachable": "could not reach {target} — is Postgres running?"
+    },
+
+    "reconcile": {
+      "usage": "Usage: npm run db:reconcile",
+      "description": "Runs every check in reconciliation_checks and records the outcome. Exits 1 if any check reports drift or fails.",
+      "option_lang": "Print in this language (en or hi), whatever the store default is.",
+      "clean": "clean",
+      "outstanding": {
+        "one": "{count} outstanding",
+        "other": "{count} outstanding"
+      },
+      "outstanding_detail": "{summary} — {detail}",
+      "timing": "({durationMs} ms, {corrected} corrected)",
+      "unattended": "{check} is {health} — nothing is running this check",
+      "status": {
+        "ok": "ok",
+        "drift": "drift",
+        "failed": "failed"
+      },
+      "health": {
+        "ok": "ok",
+        "overdue": "overdue",
+        "never_run": "never run",
+        "disabled": "disabled"
+      }
+    },
+
+    "catalogue": {
+      "usage": "Usage: npm run catalogue:import -- <file.csv> [--dry-run]",
+      "option_dry_run": "Validate and report without writing anything.",
+      "option_lang": "Print in this language (en or hi), whatever the store default is.",
+      "columns": "Columns: {columns}.",
+      "docs": "See docs/catalogue-import.md, and docs/catalogue-template.csv for a starting file.",
+      "no_file": "no file given — name the CSV to import",
+      "rows_read": {
+        "one": "{file}: {count} data row",
+        "other": "{file}: {count} data rows"
+      },
+      "dry_run_result": "{importable} would import, {rejected} rejected",
+      "result": "{imported} imported, {rejected} rejected",
+      "categories_created": "categories created: {names}",
+      "hsn_codes_created": "HSN codes added: {codes}",
+      "rejected_heading": "rejected rows — line numbers match the spreadsheet:",
+      "dry_run_note": "dry run — nothing was written",
+      "unreadable": "the file could not be read: {detail}",
+      "heading": {
+        "line": "line",
+        "column": "column",
+        "value": "value",
+        "reason": "reason"
+      }
+    }
+  },
+
+  "error": {
+    "tax": {
+      "bill": {
+        "no_lines": "A bill needs at least one line to be totalled.",
+        "discount_invalid": "Bill discount {amount} is not a positive amount.",
+        "discount_exceeds_total": "Bill discount {discount} is more than the bill's {total}."
+      },
+      "line": {
+        "qty_invalid": "Line {line}: quantity must be more than zero.",
+        "rate_invalid": "Line {line}: rate must be zero or more.",
+        "tax_rate_invalid": "Line {line}: {tax} rate {rate} is not a valid rate.",
+        "igst_with_cgst": "Line {line}: a supply is either intra-state (CGST + SGST) or inter-state (IGST), not both.",
+        "discount_invalid": "Line {line}: discount {amount} is not a positive amount.",
+        "discount_exceeds_line": "Line {line}: discount {discount} is more than the line's {total}."
+      },
+      "roundoff": {
+        "increment_invalid": "Round-off increment {increment} must be more than zero.",
+        "increment_below_paisa": "Round-off increment {increment} is smaller than a paisa.",
+        "mode_invalid": "Round-off mode \"{mode}\" is not one of nearest, up, down."
+      }
+    },
+
+    "csv": {
+      "empty_file": "The file is empty.",
+      "duplicate_heading": "Duplicate column heading: {columns}.",
+      "unterminated_quote": "Unterminated quoted field starting on line {line}. A quote was opened and never closed, so the rest of the file cannot be read."
+    },
+
+    "catalogue": {
+      "missing_columns": "The file is missing required column(s): {missing}. Expected headings: {expected}.",
+      "ambiguous_slab": "Two tax slabs are in force at the same rate ({slab}). Close one before importing."
+    }
+  },
+
+  "catalogue": {
+    "issue": {
+      "required": "required, but blank",
+      "too_long": "longer than {limit} characters ({length})",
+      "field_count": "has {actual} values but the heading has {expected} — a comma inside a name needs the value wrapped in double quotes",
+      "barcode_duplicate_in_file": "already used on line {line} of this file",
+      "barcode_in_system": "already on a product in the system",
+      "hsn_not_six_digits": "must be exactly 6 digits",
+      "rate_not_a_percentage": "not a percentage (for example 5, 12.5, 18)",
+      "rate_no_slab_in_force": "no GST slab in force at this rate",
+      "money_invalid": "not a money amount (digits, optionally with up to 2 decimal places)",
+      "money_not_positive": "must be greater than zero",
+      "sale_price_above_mrp": "higher than mrp ({mrp}) — MRP is a legal maximum",
+      "unit_unknown": "not a unit in the units master",
+      "quantity_invalid": "not a quantity (digits, optionally up to 3 decimal places)"
+    }
+  }
+}

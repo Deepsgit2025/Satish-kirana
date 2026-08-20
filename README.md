@@ -13,6 +13,7 @@ Offline-first supermarket POS, inventory and back-office system.
 | `docs/schema.md` | Every table, column and design rule |
 | `docs/modules.md` | Module list with sizing |
 | `docs/build-order.md` | Ordered build steps |
+| `docs/i18n.md` | How every user-facing string reaches the reader, in their language |
 
 ## Layout
 
@@ -22,6 +23,9 @@ server/        Postgres + API + sync + backup jobs
 apps/counter/  billing terminal (Electron, local SQLite cache)
 apps/office/   back office (Electron)
 packages/shared/  tax engine, types, i18n — used by all apps
+  i18n/locales/  en.json, hi.json — every user-facing string
+assets/fonts/  Noto Sans Devanagari (OFL), for Hindi on screen and on receipts
+tools/         the project's own ESLint rules
 scripts/       backup, restore-verify, seed
 ```
 
@@ -42,7 +46,7 @@ Read `CLAUDE.md` before writing code. The short version:
 - Tax is snapshotted on every line. Never join to `tax_slabs` when rendering a document.
 - One rounding function, one call site.
 - Void, don't delete. Reverse, don't edit.
-- No hardcoded user-facing strings — everything through i18n.
+- No hardcoded user-facing strings — everything through i18n. `npm run lint` fails the build on one.
 
 ## Security
 

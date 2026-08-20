@@ -1,7 +1,9 @@
 import pg from 'pg';
 
+import { createCliOutput, pad, printUsage, type CliOutput, type Usage } from '../cli/output.js';
 import { describeError } from '../describe-error.js';
-import { runAllReconciliationChecks } from './checks.js';
+import { resolveLanguageFor, resolveLanguageOffline } from '../i18n/language.js';
+import { runAllReconciliationChecks, type ReconciliationOutcome } from './checks.js';
 import { readReconciliationHealth } from './health.js';
 
 /**
@@ -16,50 +18,80 @@ import { readReconciliationHealth } from './health.js';
  *
  * Exit code is 1 when any check reports drift or fails, so a scheduler that
  * only watches exit codes still notices.
+ *
+ * The owner is a reader of this, not just a scheduler: D30 puts the same
+ * statuses on the dashboard, so `ok` / `drift` / `overdue` are translated words
+ * here rather than raw column values. The check keys are not - `stock_on_hand`
+ * is the name of a thing in the database, and a support call goes better when
+ * both ends are saying the same string.
  */
 
-const USAGE = `Usage: npm run db:reconcile
+const TAG = 'reconcile';
 
-Runs every check in reconciliation_checks and records the outcome. Exits 1 if
-any check reports drift or fails.
+const USAGE: Usage = {
+  synopsis: 'cli.reconcile.usage',
+  options: [
+    { flag: '--lang=hi', description: 'cli.reconcile.option_lang' },
+    { flag: '--help', description: 'cli.common.option_help' },
+  ],
+  notes: [
+    { messageKey: 'cli.reconcile.description', params: {} },
+    { messageKey: 'cli.common.connection', params: {} },
+  ],
+};
 
-Connection settings are read from PGHOST, PGPORT, PGDATABASE, PGUSER and
-PGPASSWORD - see .env.example.`;
-
-function log(message: string): void {
-  console.log(`[reconcile] ${message}`);
+function explicitLanguage(argv: readonly string[]): string | undefined {
+  const flag = argv.find((argument) => argument.startsWith('--lang='));
+  return flag?.slice('--lang='.length);
 }
 
-function pad(value: string, width: number): string {
-  return value.length >= width ? value : value + ' '.repeat(width - value.length);
+/** "clean", or the outstanding count and as much of the reason as there is. */
+function summarise(output: CliOutput, outcome: ReconciliationOutcome): string {
+  const { t } = output;
+  if (outcome.status === 'ok') return t('cli.reconcile.clean');
+
+  const outstanding = t('cli.reconcile.outstanding', { count: outcome.outstanding });
+  if (outcome.detail === null) return outstanding;
+
+  // The detail names product ids and quantities, assembled by the check itself.
+  // It stays as it came: translating "product 412 at location 3" would mean the
+  // checks reporting keys, and what they actually report is a row of numbers.
+  return t('cli.reconcile.outstanding_detail', { summary: outstanding, detail: outcome.detail });
 }
 
 async function main(argv: readonly string[]): Promise<number> {
+  const explicit = explicitLanguage(argv);
+
   if (argv.includes('--help') || argv.includes('-h')) {
-    console.log(USAGE);
+    printUsage(createCliOutput(TAG, resolveLanguageOffline({ explicit })), USAGE);
     return 0;
   }
 
   const client = new pg.Client();
   await client.connect();
+  const output = createCliOutput(TAG, await resolveLanguageFor(client, { explicit }));
+  const { t } = output;
 
   try {
     const outcomes = await runAllReconciliationChecks(client);
 
     for (const outcome of outcomes) {
-      const summary =
-        outcome.status === 'ok'
-          ? 'clean'
-          : `${String(outcome.outstanding)} outstanding${outcome.detail === null ? '' : ` - ${outcome.detail}`}`;
-      log(
-        `${pad(outcome.checkKey, 20)} ${pad(outcome.status, 8)} ${summary} ` +
-          `(${String(outcome.durationMs)} ms, ${String(outcome.corrected)} corrected)`,
+      output.line(
+        `${pad(outcome.checkKey, 20)} ${pad(t(`cli.reconcile.status.${outcome.status}`), 8)} ` +
+          `${summarise(output, outcome)} ` +
+          t('cli.reconcile.timing', {
+            durationMs: outcome.durationMs,
+            corrected: outcome.corrected,
+          }),
       );
     }
 
     for (const row of await readReconciliationHealth(client)) {
       if (row.health === 'overdue' || row.health === 'never_run') {
-        log(`${row.key} is ${row.health} - nothing is running this check`);
+        output.say('cli.reconcile.unattended', {
+          check: row.key,
+          health: t(`cli.reconcile.health.${row.health}`),
+        });
       }
     }
 
@@ -72,6 +104,7 @@ async function main(argv: readonly string[]): Promise<number> {
 try {
   process.exitCode = await main(process.argv.slice(2));
 } catch (error) {
-  console.error(`[reconcile] failed: ${describeError(error)}`);
+  const output = createCliOutput(TAG, resolveLanguageOffline());
+  output.warn('cli.common.failed', { detail: describeError(error) });
   process.exitCode = 1;
 }

@@ -21,12 +21,23 @@
  * makes an error report actionable on a file of several thousand rows.
  */
 
-export class CsvError extends Error {
-  constructor(message: string) {
-    super(message);
+import { type MessageParams, TranslatableError, type TranslationKey } from '@ssbazar/shared';
+
+/**
+ * A file that cannot be read at all, as opposed to a row that cannot be
+ * imported. Carries a key, not a sentence: the client runs this against his own
+ * spreadsheet and reads whatever comes back, so it has to arrive in his
+ * language (invariant 19). Row-level reasons take the same route through
+ * `RowIssue.reasonKey`.
+ */
+export class CsvError extends TranslatableError {
+  constructor(messageKey: CsvErrorKey, params: MessageParams = {}) {
+    super(messageKey, params);
     this.name = 'CsvError';
   }
 }
+
+type CsvErrorKey = Extract<TranslationKey, `error.csv.${string}`>;
 
 export interface CsvRecord {
   /** 1-based physical line where this record begins. */
@@ -102,10 +113,7 @@ export function parseCsv(text: string): CsvRecord[] {
   }
 
   if (inQuotes) {
-    throw new CsvError(
-      `Unterminated quoted field starting on line ${String(recordLine)}. ` +
-        'A quote was opened and never closed, so the rest of the file cannot be read.',
-    );
+    throw new CsvError('error.csv.unterminated_quote', { line: recordLine });
   }
   if (started || fields.length > 0) endRecord();
 
@@ -139,12 +147,14 @@ export function readCsvTable(text: string): CsvTable {
   const records = parseCsv(text);
   const [header, ...rest] = records;
 
-  if (header === undefined) throw new CsvError('The file is empty.');
+  if (header === undefined) throw new CsvError('error.csv.empty_file');
 
   const columns = header.fields.map((name) => name.trim().toLowerCase());
   const duplicates = columns.filter((name, index) => columns.indexOf(name) !== index);
   if (duplicates.length > 0) {
-    throw new CsvError(`Duplicate column heading: ${[...new Set(duplicates)].join(', ')}.`);
+    throw new CsvError('error.csv.duplicate_heading', {
+      columns: [...new Set(duplicates)].join(', '),
+    });
   }
 
   const rows = rest.map((record) => {

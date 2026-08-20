@@ -1,3 +1,6 @@
+import type { TranslationKey } from '../i18n/catalogue.js';
+import { TranslatableError } from '../i18n/errors.js';
+import type { MessageParams } from '../i18n/translator.js';
 import { apportion, roundMoney } from './money.js';
 
 /**
@@ -138,9 +141,18 @@ export interface ComputedBill {
 }
 
 /**
- * Why a bill would not compute. Stable strings, so the billing screen can map
- * them to `en.json` / `hi.json` keys rather than printing an English sentence at
- * a Hindi-speaking cashier (invariant 19).
+ * Why a bill would not compute.
+ *
+ * Stable strings, and deliberately the same strings as the tail of the
+ * `error.tax.*` keys in `en.json` / `hi.json` - `taxErrorKey` is the whole of
+ * the mapping. A cashier who reads Hindi gets the reason in Hindi, and the code
+ * is what crosses the sync boundary and lands in a log, unchanged by either.
+ *
+ * Adding a code without adding its message does not compile: the template
+ * literal below has to land inside `TranslationKey`, which is derived from
+ * `en.json`. That is the check worth having, because the failure it prevents -
+ * an English sentence appearing at a Hindi terminal - only shows up on the day
+ * a bill will not total, which is the worst day to discover it.
  */
 export type TaxErrorCode =
   | 'bill.no_lines'
@@ -153,14 +165,25 @@ export type TaxErrorCode =
   | 'line.discount_invalid'
   | 'line.discount_exceeds_line'
   | 'roundoff.increment_invalid'
+  | 'roundoff.increment_below_paisa'
   | 'roundoff.mode_invalid';
 
-/** Raised for every rule above, so callers can catch them as one class. */
-export class TaxInputError extends Error {
+export function taxErrorKey(code: TaxErrorCode): TranslationKey {
+  return `error.tax.${code}`;
+}
+
+/**
+ * Raised for every rule above, so callers can catch them as one class.
+ *
+ * Carries the code and the numbers that go in the sentence, never the sentence.
+ * `Error.message` is filled from the English catalogue by `TranslatableError`,
+ * so a stack trace still reads properly without any English being written here.
+ */
+export class TaxInputError extends TranslatableError {
   readonly code: TaxErrorCode;
 
-  constructor(code: TaxErrorCode, message: string) {
-    super(message);
+  constructor(code: TaxErrorCode, params: MessageParams = {}) {
+    super(taxErrorKey(code), params);
     this.name = 'TaxInputError';
     this.code = code;
   }
@@ -203,13 +226,10 @@ export function computeBillTax(bill: BillInput): ComputedBill {
   const billDiscount = bill.billDiscountAmount ?? 0;
 
   if (bill.lines.length === 0) {
-    throw new TaxInputError('bill.no_lines', 'A bill needs at least one line to be totalled.');
+    throw new TaxInputError('bill.no_lines');
   }
   if (!Number.isFinite(billDiscount) || billDiscount < 0) {
-    throw new TaxInputError(
-      'bill.discount_invalid',
-      `Bill discount ${String(billDiscount)} is not a positive amount.`,
-    );
+    throw new TaxInputError('bill.discount_invalid', { amount: String(billDiscount) });
   }
   checkRoundOffPolicy(policy);
 
@@ -217,10 +237,10 @@ export function computeBillTax(bill: BillInput): ComputedBill {
 
   const discountable = roundMoney(prepared.reduce((running, line) => running + line.netAmount, 0));
   if (billDiscount > discountable) {
-    throw new TaxInputError(
-      'bill.discount_exceeds_total',
-      `Bill discount ${billDiscount.toFixed(2)} is more than the bill's ${discountable.toFixed(2)}.`,
-    );
+    throw new TaxInputError('bill.discount_exceeds_total', {
+      discount: billDiscount.toFixed(2),
+      total: discountable.toFixed(2),
+    });
   }
 
   // Invariant 4: split by taxable value, before tax.
@@ -344,13 +364,16 @@ export function computeBillTax(bill: BillInput): ComputedBill {
 
 /** Validates one line and works out everything that does not depend on the bill. */
 function prepareLine(input: BillLineInput): PreparedLine {
-  const where = `Line ${String(input.lineNo)}`;
+  // The line number is a parameter rather than a prefix glued onto an English
+  // sentence: Hindi puts "पंक्ति {line}" in the same place here, but the moment a
+  // message wants it elsewhere a prefix cannot follow (docs/DECISIONS.md D34).
+  const where = { line: input.lineNo };
 
   if (!Number.isFinite(input.qty) || input.qty <= 0) {
-    throw new TaxInputError('line.qty_invalid', `${where}: quantity must be more than zero.`);
+    throw new TaxInputError('line.qty_invalid', where);
   }
   if (!Number.isFinite(input.rate) || input.rate < 0) {
-    throw new TaxInputError('line.rate_invalid', `${where}: rate must be zero or more.`);
+    throw new TaxInputError('line.rate_invalid', where);
   }
 
   const rates = input.taxRates;
@@ -361,33 +384,32 @@ function prepareLine(input: BillLineInput): PreparedLine {
     ['cess', rates.cessRate],
   ] as const) {
     if (!Number.isFinite(rate) || rate < 0) {
-      throw new TaxInputError(
-        'line.tax_rate_invalid',
-        `${where}: ${name} rate ${String(rate)} is not a valid rate.`,
-      );
+      throw new TaxInputError('line.tax_rate_invalid', {
+        ...where,
+        tax: name,
+        rate: String(rate),
+      });
     }
   }
   if (rates.igstRate > 0 && (rates.cgstRate > 0 || rates.sgstRate > 0)) {
-    throw new TaxInputError(
-      'line.igst_with_cgst',
-      `${where}: a supply is either intra-state (CGST + SGST) or inter-state (IGST), not both.`,
-    );
+    throw new TaxInputError('line.igst_with_cgst', where);
   }
 
   const discountAmount = input.discountAmount ?? 0;
   if (!Number.isFinite(discountAmount) || discountAmount < 0) {
-    throw new TaxInputError(
-      'line.discount_invalid',
-      `${where}: discount ${String(discountAmount)} is not a positive amount.`,
-    );
+    throw new TaxInputError('line.discount_invalid', {
+      ...where,
+      amount: String(discountAmount),
+    });
   }
 
   const lineGross = roundMoney(input.rate * input.qty);
   if (discountAmount > lineGross) {
-    throw new TaxInputError(
-      'line.discount_exceeds_line',
-      `${where}: discount ${discountAmount.toFixed(2)} is more than the line's ${lineGross.toFixed(2)}.`,
-    );
+    throw new TaxInputError('line.discount_exceeds_line', {
+      ...where,
+      discount: discountAmount.toFixed(2),
+      total: lineGross.toFixed(2),
+    });
   }
 
   const totalRate = rates.cgstRate + rates.sgstRate + rates.igstRate + rates.cessRate;
@@ -434,10 +456,7 @@ function groupByRates(lines: readonly PreparedLine[]): GroupInProgress[] {
 function checkRoundOffPolicy(policy: RoundOffPolicy): void {
   if (!policy.enabled) return;
   if (!Number.isFinite(policy.to) || policy.to <= 0) {
-    throw new TaxInputError(
-      'roundoff.increment_invalid',
-      `Round-off increment ${String(policy.to)} must be more than zero.`,
-    );
+    throw new TaxInputError('roundoff.increment_invalid', { increment: String(policy.to) });
   }
 }
 
@@ -452,10 +471,9 @@ function roundOffFor(total: number, policy: RoundOffPolicy): number {
   const totalMinor = roundMoney(total * 100, 0);
   const stepMinor = roundMoney(policy.to * 100, 0);
   if (stepMinor <= 0) {
-    throw new TaxInputError(
-      'roundoff.increment_invalid',
-      `Round-off increment ${policy.to.toFixed(2)} is smaller than a paisa.`,
-    );
+    throw new TaxInputError('roundoff.increment_below_paisa', {
+      increment: policy.to.toFixed(2),
+    });
   }
 
   const remainder = ((totalMinor % stepMinor) + stepMinor) % stepMinor;
@@ -477,10 +495,7 @@ function roundOffFor(total: number, policy: RoundOffPolicy): number {
       target = remainder * 2 >= stepMinor ? up : down;
       break;
     default:
-      throw new TaxInputError(
-        'roundoff.mode_invalid',
-        `Round-off mode "${String(policy.mode)}" is not one of nearest, up, down.`,
-      );
+      throw new TaxInputError('roundoff.mode_invalid', { mode: String(policy.mode) });
   }
 
   return roundMoney((target - totalMinor) / 100);

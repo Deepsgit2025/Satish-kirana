@@ -16,6 +16,7 @@
     "noUnusedParameters": true,
     "useUnknownInCatchVariables": true,
 
+    "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,

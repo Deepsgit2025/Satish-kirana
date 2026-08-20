@@ -309,6 +309,39 @@ Marking them inactive would hide them; leaving them active would let them be bil
 
 ---
 
+## D39 — A terminal is a user interface, and the line is who reads it
+
+Invariant 19 says every user-facing string comes from `en.json` / `hi.json`. Step 6 had to settle what counts, because at that point the only text in the system was three command-line tools and it would have been easy to call all of it developer output and exempt the lot.
+
+**`catalogue:import` is not developer output.** The client runs it against his own spreadsheet while he is keying several thousand SKUs, months before there is a screen — that is the entire reason the import core shipped before the product master (D34). Its error report is the first thing this system ever says to the person who bought it. It is translated, and so is everything the other two commands print, because carving out an exception for `db:migrate` would mean a lint exception that every future command inherits by default.
+
+**The test is who reads it, not where it appears.** A cashier or the owner reads "this barcode is already on a product": translated. Whoever is installing the system reads "migration 004 has changed since it was applied": not translated. `MigrationPlanError` names filenames and checksums, is read in the same session as a stack trace, and a Hindi translation of it has no reader. Those messages reach the CLI as detail and are passed through as detail, inside a sentence that *is* translated.
+
+**Four things stay English on purpose**, and the reason differs each time:
+
+- **Command-line flags.** `--dry-run` is typed back character for character. A Hindi build that renamed it would print instructions that do not work.
+- **Column names in the import report.** They are the headings in the client's own spreadsheet; a translated `hsn_code` points at a column that is not there.
+- **Keys of things in the database** — `stock_on_hand`, `default_language`. A support call goes better when both ends say the same string.
+- **Statutory acronyms** — GST, CGST, HSN, MRP.
+
+The consequence for later steps: a new background job, sync error or report inherits this test rather than deciding again. If the shop sees it, it has a key.
+
+---
+
+## D40 — Decision numbers are allocated from the file, not from memory
+
+**Ask for the entry by what it decides. Whoever writes it reads the file and takes the next free number.** Never specify the number in the request.
+
+D35 and D36 were written twice because the request named a number that had already been used. The mechanism is ordinary and will recur: this file grows in sessions that do not see each other, so the highest number in it moves independently of anyone's recollection of where it had got to. Remembering "we were around D34" is accurate right up until a session lands two entries and it is not, and there is no moment where that becomes visible from the outside.
+
+Allocating from the file closes it because the file is the only thing that knows. Read the headings, take the highest, add one — as this entry did.
+
+**Why it matters more here than the tidiness suggests.** D31 makes decision IDs one of the three stable references in this project, alongside migration filenames and the names of things in the database, and that standing is what lets a SQL comment or a code comment cite `D27` and stay true. A duplicate number breaks the property that makes them worth citing: a reader following a reference gets two answers and no way to tell which one was meant. And because the file is append-only, the repair is not a renumber — it is another entry saying which one won, so a collision leaves a permanent scar rather than a corrected line.
+
+The same applies to CLAUDE.md's invariants for the same reason, and D31 already says why they are appended and never inserted.
+
+---
+
 ## Open items
 
 | Item | Owner | Blocks |

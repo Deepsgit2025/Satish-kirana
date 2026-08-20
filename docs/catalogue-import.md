@@ -47,17 +47,42 @@ There is no column for the internal item code. The system assigns one (`SKU-0000
 **The file is never abandoned over one row.** A 2,000-row file with 30 problems imports the other 1,970 and prints the 30, each with the line number you see in the spreadsheet's row gutter, the value it objected to, and why:
 
 ```
-[catalogue] products.csv: 2000 data row(s)
+[catalogue] products.csv: 2000 data rows
 [catalogue] 1970 imported, 30 rejected
 
 [catalogue] rejected rows — line numbers match the spreadsheet:
-[catalogue]   line 14     barcode    8901234567890  already used on line 9 of this file
-[catalogue]   line 27     hsn_code   1006           must be exactly 6 digits
-[catalogue]   line 31     unit       Bori           not a unit in the units master
-[catalogue]   line 88     tax_rate   12             no GST slab in force at this rate
+[catalogue]   line  column     value          reason
+[catalogue]   14    barcode    8901234567890  already used on line 9 of this file
+[catalogue]   27    hsn_code   1006           must be exactly 6 digits
+[catalogue]   31    unit       Bori           not a unit in the units master
+[catalogue]   88    tax_rate   12             no GST slab in force at this rate
 ```
 
 Every problem in a row is listed, not just the first, so one pass through the spreadsheet fixes the lot. Fix those rows, and re-run the file — the rows that already imported will be rejected the second time as duplicate barcodes, which is the intended behaviour and not an error to worry about. It is usually easier to keep a separate file of just the corrected rows.
+
+## In Hindi
+
+Everything above prints in Hindi too, and the report reads exactly the same way:
+
+```
+npm run catalogue:import -- products.csv --dry-run --lang=hi
+```
+
+```
+[catalogue] products.csv: 2000 पंक्तियाँ
+[catalogue] 1970 आयात हुईं, 30 अस्वीकृत
+
+[catalogue] अस्वीकृत पंक्तियाँ — पंक्ति संख्याएँ स्प्रेडशीट से मेल खाती हैं:
+[catalogue]   पंक्ति  कॉलम       मान            कारण
+[catalogue]   27      hsn_code   1006           ठीक 6 अंकों का होना चाहिए
+[catalogue]   31      unit       Bori           इकाई मास्टर में यह इकाई नहीं है
+```
+
+Without `--lang` it uses the store's own setting (`app_settings.default_language`), so once that is set to Hindi the plain command prints Hindi.
+
+**Two things stay in English on purpose.** The **column names** are the headings in your own spreadsheet — `hsn_code` has to match what is in the file, so translating it would be pointing at a column that does not exist. And the **values** are whatever you typed. Only the reasons are translated.
+
+---
 
 ### Two things that stop the whole file
 
