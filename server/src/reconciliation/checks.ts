@@ -1,8 +1,7 @@
 import type { Queryable } from '../db/queryable.js';
 import { firstRow, readInt } from '../db/rows.js';
-import { describeError } from '../describe-error.js';
 import { readStockOnHandDrift } from '../stock/stock-on-hand.js';
-import { recordReconciliationRun, type ReconciliationStatus } from './health.js';
+import { runAndRecordCheck, type CheckOutcome } from './health.js';
 
 /**
  * The scheduled reconciliation jobs. Each one compares a derived value against
@@ -26,21 +25,11 @@ export const PRODUCT_TAX_CACHE_CHECK = 'product_tax_cache';
 export const PRODUCT_PRICE_CACHE_CHECK = 'product_price_cache';
 export const STOCK_ON_HAND_CHECK = 'stock_on_hand';
 
-export interface ReconciliationOutcome {
-  readonly checkKey: string;
-  readonly status: ReconciliationStatus;
-  readonly outstanding: number;
-  readonly corrected: number;
-  readonly durationMs: number;
-  readonly detail: string | null;
-}
+/** The shape every check returns. Defined once, in `health.ts`. */
+export type ReconciliationOutcome = CheckOutcome;
 
 /** How many offending rows a `detail` string names before it says "and N more". */
 const DETAIL_SAMPLE = 3;
-
-function statusFor(outstanding: number): ReconciliationStatus {
-  return outstanding > 0 ? 'drift' : 'ok';
-}
 
 async function scalarInt(db: Queryable, sql: string): Promise<number> {
   const { rows } = await db.query(sql);
@@ -48,67 +37,10 @@ async function scalarInt(db: Queryable, sql: string): Promise<number> {
 }
 
 /**
- * Runs `work`, records the outcome, and returns it. A thrown error becomes a
- * `failed` run rather than an exception, so one broken check does not stop the
- * others from reporting.
- */
-async function runCheck(
-  db: Queryable,
-  checkKey: string,
-  work: () => Promise<{ outstanding: number; corrected: number; detail: string | null }>,
-): Promise<ReconciliationOutcome> {
-  const startedAt = Date.now();
-
-  try {
-    const result = await work();
-    const outcome: ReconciliationOutcome = {
-      checkKey,
-      status: statusFor(result.outstanding),
-      outstanding: result.outstanding,
-      corrected: result.corrected,
-      durationMs: Date.now() - startedAt,
-      detail: result.detail,
-    };
-
-    await recordReconciliationRun(db, {
-      checkKey,
-      status: outcome.status,
-      outstanding: outcome.outstanding,
-      corrected: outcome.corrected,
-      durationMs: outcome.durationMs,
-      ...(outcome.detail === null ? {} : { detail: outcome.detail }),
-    });
-
-    return outcome;
-  } catch (error) {
-    const detail = describeError(error);
-    const durationMs = Date.now() - startedAt;
-
-    try {
-      await recordReconciliationRun(db, {
-        checkKey,
-        status: 'failed',
-        outstanding: 0,
-        corrected: 0,
-        durationMs,
-        detail,
-      });
-    } catch {
-      // Recording failed too, so the panel will show this check as overdue
-      // rather than failed. Nothing here can fix that, and swallowing the
-      // original error on top of it would leave no trace at all.
-      throw error;
-    }
-
-    return { checkKey, status: 'failed', outstanding: 0, corrected: 0, durationMs, detail };
-  }
-}
-
-/**
  * `stock_on_hand` against the sum of `stock_ledger`. Reports; never corrects.
  */
 export async function runStockOnHandCheck(db: Queryable): Promise<ReconciliationOutcome> {
-  return runCheck(db, STOCK_ON_HAND_CHECK, async () => {
+  return runAndRecordCheck(db, STOCK_ON_HAND_CHECK, async () => {
     const drift = await readStockOnHandDrift(db);
     if (drift.length === 0) return { outstanding: 0, corrected: 0, detail: null };
 
@@ -133,7 +65,7 @@ export async function runStockOnHandCheck(db: Queryable): Promise<Reconciliation
  * only be a product with no tax history at all, and wants a person.
  */
 export async function runProductTaxCacheCheck(db: Queryable): Promise<ReconciliationOutcome> {
-  return runCheck(db, PRODUCT_TAX_CACHE_CHECK, async () => {
+  return runAndRecordCheck(db, PRODUCT_TAX_CACHE_CHECK, async () => {
     const corrected = await scalarInt(db, `SELECT refresh_product_tax_slab_cache() AS n`);
     const outstanding = await scalarInt(
       db,
@@ -162,7 +94,7 @@ export async function runProductTaxCacheCheck(db: Queryable): Promise<Reconcilia
  * same date would never reach the column the counters bill from.
  */
 export async function runProductPriceCacheCheck(db: Queryable): Promise<ReconciliationOutcome> {
-  return runCheck(db, PRODUCT_PRICE_CACHE_CHECK, async () => {
+  return runAndRecordCheck(db, PRODUCT_PRICE_CACHE_CHECK, async () => {
     const corrected = await scalarInt(db, `SELECT refresh_product_price_cache() AS n`);
     const outstanding = await scalarInt(
       db,
