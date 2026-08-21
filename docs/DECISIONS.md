@@ -448,6 +448,188 @@ This supersedes nothing. It is the reason the practice exists, written down befo
 
 ---
 
+## D46 — WAL archiving without a base backup is a directory that fills the disk
+
+The build order asks step 8 for "WAL archiving and a nightly compressed `pg_dump`". Built exactly
+as written, the first half does nothing.
+
+**A `pg_dump` is a logical backup and archived WAL cannot be replayed onto one.** The dump
+describes the data; restoring it produces a new cluster with a new timeline and WAL of its own.
+The archived segments belong to the cluster they came from. There is no procedure — none, not a
+difficult one — that combines the two.
+
+So a system archiving WAL alongside nothing but logical dumps writes 16 MB per segment, forever,
+to a directory that can never be used. That is worse than not archiving: it costs disk
+continuously, it looks like protection on every review, and the day somebody reaches for it is
+the day they find out. It also cannot be pruned safely, because pruning needs to know what the
+oldest recoverable point is and there isn't one.
+
+**WAL becomes recoverable on top of a physical base backup**, `pg_basebackup`, and only then. So
+step 8 takes one on a schedule (`BACKUP_BASE_EVERY_DAYS`, default weekly), keeps the newest two,
+and prunes the archive against the oldest one still kept rather than against the calendar. With
+no base backup present, nothing is pruned at all and `wal_archive` reports it: there is no way to
+know what is needed, and the safe answer to not knowing is to keep everything and say so.
+
+**What this buys is the window.** The nightly dump alone loses everything between 23:30 and the
+failure — at a thousand bills a day, an evening's trading, which is the part of the day the shop
+makes its money in. The pair narrows that to the last few minutes. That is the whole reason the
+build order asked for WAL archiving at all, and it is why the answer to "the base backup is extra
+scope" is no: without it, the thing asked for is inert.
+
+**The two are kept deliberately separate all the same.** The dump is the verified path — weekly
+`backup:verify` restores it and asserts against it, and it is what you use when the answer is
+"put yesterday back", on any compatible Postgres, without matching the cluster byte for byte.
+Point-in-time recovery is the sharper instrument and the more fragile one: it needs the same
+major version, an intact archive, and a person choosing a target time under pressure. Having both
+is not redundancy, it is two different bad mornings.
+
+**A base backup is not taken when the archive is broken.** `wal_archive` checks `archive_mode`
+and `pg_stat_archiver` first, and skips the base backup if either says archiving is not working.
+Taking one anyway would write gigabytes that recover nothing and hide the real fault behind a
+fresh timestamp — the same failure mode as D32's nightly rebuild, in a different place: an
+automatic action that repairs the appearance and destroys the evidence.
+
+---
+
+## D47 — Restore-verify uses a scratch database, and the privilege it needs lives on its own role
+
+Restore-verify has to put a dump somewhere. Two ways to give it somewhere, and the choice was
+raised as a security question: the weekly check currently needs `CREATEDB` on the live cluster,
+and a job holding a privilege on production is a surface that did not exist before.
+
+**Scratch database** (chosen). `CREATE DATABASE ssbazar_verify` on the live cluster, restore into
+it, assert, drop it.
+
+**Throwaway cluster.** `initdb` a fresh cluster in a temporary directory on a spare port, start it,
+restore, assert, stop it, delete it. No privilege on the live cluster at all.
+
+Both were built and run against the real dump before deciding. The throwaway cluster works: 7
+seconds to `initdb`, 51 MB on disk, 1.7 seconds to create and restore, and it independently
+confirmed the assertion this design cares most about — `max(recorded_at)` in the restored copy
+came back as the original 08:55:34, not the restore time, so `stamp_recorded_at` did not fire
+during load.
+
+### Why the scratch database wins anyway
+
+**The throwaway cluster does not give the property it appears to give.** The argument for it is
+that a real disaster-recovery drill restores onto hardware unrelated to the live server. It does
+not do that. It runs on the same machine, the same disk, the same OS and the same Postgres
+installation; if that disk is the thing that failed, both options are equally unavailable. What
+it actually buys is *cluster* independence, not *hardware* independence, and those are different
+claims that look alike from a distance. The second is the one worth having, and this is not it.
+
+**Hardware independence is already covered, and covered better.** D22 puts an annual manual drill
+on a different machine with the person who would actually do it. That tests the thing that fails
+in a real recovery, which is not the software: it is whether a person can find the passphrase,
+reach the files, and follow the procedure at seven in the morning with a shop opening at nine. An
+automated weekly job cannot test that and should not pretend to.
+
+**It adds a failure mode to the job that runs when everything else has already failed.**
+`pg_ctl start` held its console for the entire life of the server during the trial and only
+returned when the cluster was stopped, so the job has to detach it correctly; and a job killed
+between start and stop leaves an orphaned postmaster holding a port and 51 MB, which the next
+run then collides with. The scratch-database path has none of that — the failure modes are
+`CREATE DATABASE` fails or `pg_restore` fails, both of which are already reported.
+
+There is also an unresolved Windows constraint: PostgreSQL refuses to start its server under an
+administrative account, and `docs/backup.md` schedules these jobs as `SYSTEM`. The trial ran as an
+ordinary user and started fine; running it as `SYSTEM` was **not** tested. Anyone choosing the
+throwaway cluster has to settle that first.
+
+### The privilege, measured rather than assumed
+
+`ssbazar` is owned by `postgres`, not by the application role. `DROP DATABASE` requires ownership
+or superuser, so `CREATEDB` does **not** confer any ability to drop the shop's database. The
+marginal grant is exactly: may create databases, and may drop the ones it created. The realistic
+worst case is disk exhaustion, not data loss.
+
+**That is small, but "small" is not "belongs on the application role."** So the privilege moves off
+it: a dedicated role holding `CREATEDB` and nothing else, owning nothing but scratch databases,
+used by the weekly job and by no other code path. The application role that runs billing keeps no
+elevated attribute at all, which is the outcome the original concern was actually asking for —
+and it is a one-line role change rather than a rebuilt module. `BACKUP_VERIFY_PGUSER` /
+`BACKUP_VERIFY_PGPASSWORD` carry it: they apply to the maintenance, restore and assertion
+connections only, never to the connection that records the run on the panel.
+
+`REPLICATION` is a separate matter and is not affected by this decision. `pg_basebackup` needs it
+whichever way the verify is built (D46), and it belongs on the same dedicated backup role for the
+same reason.
+
+### What choosing this gives up, stated plainly
+
+A dump is restored into a cluster that already has the roles, extensions and settings it expects.
+A dump that silently depended on something cluster-level and undumped would pass here and fail on
+bare metal. `--no-owner --no-privileges` widens that gap further by design.
+
+The trial restore into a cluster built from nothing did succeed, so the gap is not currently
+open — but nothing checks that it stays closed. **The annual drill in D22 is what covers it**, and
+that is now the second thing depending on the drill actually happening rather than being intended.
+
+### When to revisit
+
+- **The annual drill lapses.** If a year goes by without one, the weekly check is the only
+  restore anybody performs, and it should then be made to prove more.
+- **A second machine exists.** The moment there is somewhere else to restore to, the useful
+  version of this is a job that restores to *that*, not one that spins a second cluster on the
+  same disk.
+- **The verify starts needing to test recovery rather than the file.** Point-in-time recovery
+  (D46) cannot be rehearsed inside a scratch database — replaying WAL onto a base backup needs a
+  cluster of its own. If PITR moves from documented to routinely exercised, the throwaway cluster
+  comes back on its own merits, for that job rather than for this one.
+
+---
+
+## D48 — A base backup taken before archiving started can never be rolled forward
+
+D46 says WAL archiving needs a base backup to anchor it. That is necessary and it is not
+sufficient, and the gap between the two was found by switching archiving on and watching the
+check report `ok` for a system that could not recover anything.
+
+**The sequence, because it is the ordinary one rather than a contrived one.** `archive_mode` needs
+a server restart, not a reload, so there is always a window where the setting is configured and
+not yet in force. A base backup taken in that window records a start WAL of, say, `0008`. The
+restart happens an hour later. The archive begins at `000B`. Segments `0009` and `000A` were
+written while nothing was archiving them and do not exist anywhere. The WAL chain has a hole at
+its start, so recovery from that base backup stops at the end of the backup's own streamed WAL
+and cannot reach the archive at all.
+
+**Every fact the check looked at was true.** `archive_mode` was on. A base backup was present. The
+archiver had never failed. `wal_archive` reported `ok`, and point-in-time recovery was impossible.
+That is a worse failure than reporting nothing, because it is a specific assurance that recovery
+exists — and D30 built this panel so somebody would rely on it.
+
+**So a base backup records the `archive_mode` in force when it was taken**, and a backup that
+cannot be rolled forward does not count towards having one. The check reports `rollable=` beside
+`base_backups=` for the same reason: the count on its own is the reading that was wrong.
+
+**And it fixes itself rather than waiting for the cadence.** Nothing rollable makes a base backup
+due immediately, regardless of `BACKUP_BASE_EVERY_DAYS`. A weekly schedule would otherwise leave
+the shop without point-in-time recovery for the rest of the week — and this is a repair the job
+can safely make, because taking a base backup is what the job does anyway (D32's rule: correct on
+a schedule only where the correction is the normal action, not where it destroys evidence).
+
+**A sidecar that does not record the mode counts as not rollable.** Unknown is not the same as
+fine, and treating it as fine is the exact mistake being guarded against. It self-clears the next
+time a base backup is taken.
+
+### Why this does not need segment-by-segment continuity checking
+
+The obvious next step — walk the archive and prove there is no gap between the base backup's start
+and the newest segment — was considered and is not being built. **Postgres does not create gaps
+on its own.** A failing `archive_command` is retried against the same segment indefinitely; it is
+never skipped, which is why `failed_count` and `last_failed_wal` catch an outage while it is
+happening. The archive command refuses to overwrite for the same reason. And the only thing that
+deletes from the archive is the pruning here, which only ever removes segments behind the oldest
+base backup being kept.
+
+That leaves exactly one way to punch a hole in the middle of a healthy archive: switching
+archiving off and on again. Which is the case above, and is what the recorded mode catches. WAL
+segment names are also not as simple to enumerate as they look — the last eight hex digits run
+`00` to `FF` before the middle eight increment — and a continuity check that got that arithmetic
+wrong would raise false alarms, which is worse than the check not existing.
+
+---
+
 ## Open items
 
 | Item | Owner | Blocks | Status |
@@ -464,7 +646,7 @@ FSSAI licence: **held**, number to be entered in the Business Profile.
 
 `plan.md` Part 5 sized the product CSV at six to eight weeks of the client's staff and called it the longest pole in the project, on the assumption it started when the template shipped with step 5. **It has not started.**
 
-Step 7 is done, which leaves two steps in R0 — local backup and remote support. So the arithmetic has inverted: the software reaches the end of R0 with an empty catalogue, and the go-live date is set by data entry rather than by anything in this repository. Every day it does not start is a day on the end, and no amount of build speed recovers it.
+Steps 7 and 8 are done, which leaves one step in R0 — remote support. So the arithmetic has inverted: the software reaches the end of R0 with an empty catalogue, and the go-live date is set by data entry rather than by anything in this repository. Every day it does not start is a day on the end, and no amount of build speed recovers it.
 
 Two consequences worth acting on rather than noting:
 

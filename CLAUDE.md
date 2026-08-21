@@ -122,6 +122,13 @@ Violating any of these is a bug, even if the code works and tests pass.
   has nothing to do with the code. Register a throwaway key inside the test's own transaction and
   assert on that. A test that passes only until someone uses the thing it tests is worse than no
   test: it looks like coverage and it breaks on the day the feature starts working.
+- **`withRollback` does not undo a sequence.** `setval`, `nextval` and `currval` are
+  non-transactional by design — a ROLLBACK leaves them where they were left, which is the whole
+  reason two counters can allocate ids at once. So a test that winds a real sequence back does not
+  clean up after itself: it leaves the developer's database issuing ids that already exist, and
+  the failure lands in some unrelated test that inserts next. Wind back a table the test created
+  inside its own transaction, never a real one. The same caution covers everything the transaction
+  does not own — files, child processes, `ALTER SYSTEM`, anything outside Postgres.
 - **No new dependency without asking.** This runs unattended in a shop for years.
 - **When a spec is ambiguous, stop and ask.** Don't invent business rules — most of them have a reason documented in `docs/schema.md`.
 

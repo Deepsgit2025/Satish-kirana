@@ -138,6 +138,18 @@ Then the three real screens on top: list with search and filter, single-product 
 ## Step 8 — Local backup
 
 > Implement WAL archiving and a nightly compressed `pg_dump` to a local directory, with 7-day retention. Add a `restore-verify` script that restores a dump to a scratch database and asserts row counts and that `stock_on_hand` equals the sum of `stock_ledger`.
+>
+> **WAL archiving needs a base backup or it does nothing.** Archived segments cannot be replayed onto a restored `pg_dump` — a logical restore is a new cluster with a new timeline — so archiving alongside only nightly dumps writes to a directory that fills the disk and recovers nothing. `pg_basebackup` on a schedule is what anchors it, and WAL is pruned against the oldest base backup still kept rather than against the calendar (`docs/DECISIONS.md` D46).
+>
+> **Three checks, not one.** They report through the reconciliation health surface like everything else (`docs/DECISIONS.md` D30) — `local_backup` and `wal_archive` nightly, `backup_restore_verify` weekly. Separate rows because the panel's whole claim is made through one column, `last_run_at`, and three cadences cannot share it: a verify that stopped six weeks ago would otherwise hide behind last night's successful dump.
+>
+> **Restore-verify asserts against a manifest, never against the live database.** The dump is from last night and the shop has been trading since, so a comparison with live reports a difference every single day — and a check that cries wolf daily is a check nobody reads within a week. A manifest written beside each dump, captured inside the dump's own snapshot, asks the only question with a right answer: did this file come back as what went into it.
+>
+> Retention deletes what is redundant and never what is last. The newest dump is never pruned however old it is — otherwise a fortnight of failed nightly jobs ends with the last copy deleted on a night when nothing is going to replace it.
+
+**Done when:** a dump is taken and read back, `restore-verify` restores it into a scratch database and every assertion passes, and all three checks appear on the same panel as the tax cache and stock drift checks — with `overdue` reported when one stops running.
+
+**It needs two grants and a restart**, and none of them is application work. `CREATEDB` for the scratch database, `REPLICATION` for `pg_basebackup`, and `archive_mode = on` takes a server restart rather than a reload. `docs/backup.md` carries the exact settings, the Windows service-account permissions the archive command needs, and the restore procedure this rehearses.
 
 ---
 
