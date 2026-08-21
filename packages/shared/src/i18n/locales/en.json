@@ -53,6 +53,24 @@
         "disabled": "disabled"
       }
     },
+    "backup": {
+      "usage": "Usage: npm run backup:run",
+      "description": "Takes the nightly dump, prunes past the retention window, and maintains the WAL archive. Records both on the reconciliation health panel. Exits 1 if either reports a problem or fails.",
+      "option_lang": "Print in this language (en or hi), whatever the store default is.",
+      "directory": "backup directory: {directory}",
+      "retention": "keeping dumps for {days} days; a base backup every {baseDays} days",
+      "timing": "({durationMs} ms)"
+    },
+    "verify": {
+      "usage": "Usage: npm run backup:verify",
+      "description": "Restores the newest dump into a scratch database and asserts it against the manifest written beside it. Never writes to the live database. Exits 1 if any assertion fails.",
+      "option_lang": "Print in this language (en or hi), whatever the store default is.",
+      "scratch": "scratch database: {database}",
+      "assertions": {
+        "one": "{count} assertion checked",
+        "other": "{count} assertions checked"
+      }
+    },
     "catalogue": {
       "usage": "Usage: npm run catalogue:import -- <file.csv> [--dry-run]",
       "option_dry_run": "Validate and report without writing anything.",

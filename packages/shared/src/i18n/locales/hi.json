@@ -53,6 +53,24 @@
         "disabled": "बंद"
       }
     },
+    "backup": {
+      "usage": "प्रयोग: npm run backup:run",
+      "description": "रात्रिकालीन डंप लेता है, तय अवधि से पुराने डंप हटाता है, और WAL संग्रह संभालता है। दोनों का परिणाम reconciliation health पैनल पर दर्ज होता है। कोई समस्या मिले या विफल हो तो 1 के साथ बाहर निकलता है।",
+      "option_lang": "इसी भाषा में दिखाएँ (en या hi), स्टोर डिफ़ॉल्ट चाहे जो हो।",
+      "directory": "बैकअप निर्देशिका: {directory}",
+      "retention": "डंप {days} दिन तक रखे जाते हैं; बेस बैकअप हर {baseDays} दिन में",
+      "timing": "({durationMs} ms)"
+    },
+    "verify": {
+      "usage": "प्रयोग: npm run backup:verify",
+      "description": "सबसे नए डंप को एक अलग डेटाबेस में लौटाता है और उसके साथ रखे मैनिफ़ेस्ट से मिलान करता है। लाइव डेटाबेस में कुछ नहीं लिखता। कोई जाँच विफल हो तो 1 के साथ बाहर निकलता है।",
+      "option_lang": "इसी भाषा में दिखाएँ (en या hi), स्टोर डिफ़ॉल्ट चाहे जो हो।",
+      "scratch": "अलग डेटाबेस: {database}",
+      "assertions": {
+        "one": "{count} जाँच की गई",
+        "other": "{count} जाँचें की गईं"
+      }
+    },
     "catalogue": {
       "usage": "प्रयोग: npm run catalogue:import -- <file.csv> [--dry-run]",
       "option_dry_run": "जाँचें और बताएँ, कुछ भी लिखे बिना।",
